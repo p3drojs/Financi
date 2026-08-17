@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "testRunner": "jest",
+  "jest": {
+    "projectType": "custom",
+    "config": {
+      "preset": "ts-jest",
+      "testEnvironment": "node",
+      "rootDir": ".",
+      "testMatch": ["<rootDir>/test/unit/**/*.test.ts"],
+      "setupFiles": ["<rootDir>/test/env.setup.ts"]
+    }
+  },
+  "mutate": [
+    "src/modules/**/*.service.ts",
+    "src/utils/password.ts",
+    "src/utils/jwt.ts",
+    "!src/**/*.test.ts"
+  ],
+  "reporters": ["html", "clear-text", "progress"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/index.html"
+  },
+  "coverageAnalysis": "perTest",
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 50
+  }
+}

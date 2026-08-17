@@ -1,0 +1,123 @@
+openapi: 3.0.3
+info:
+  title: Financi API
+  description: API do Financi — controle financeiro pessoal.
+  version: 0.1.0
+servers:
+  - url: http://localhost:3000
+    description: Ambiente local
+
+tags:
+  - name: Health
+    description: Status da API
+  - name: Auth
+    description: Cadastro e autenticação de usuário
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Verifica se a API está no ar
+      responses:
+        '200':
+          description: API funcionando normalmente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Cria um novo usuário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+      responses:
+        '201':
+          description: Usuário criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Erro de validação dos dados enviados
+        '409':
+          description: Já existe um usuário com esse email
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Autentica um usuário existente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+      responses:
+        '200':
+          description: Login realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Email ou senha inválidos
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+            name:
+              type: string
+              nullable: true
+        token:
+          type: string
+          description: JWT de acesso

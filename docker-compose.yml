@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: financi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: financi
+      POSTGRES_PASSWORD: financi
+      POSTGRES_DB: financi_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - financi_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financi -d financi_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  sonarqube:
+    image: sonarqube:community
+    container_name: financi-sonarqube
+    restart: unless-stopped
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    ports:
+      - "9000:9000"
+    volumes:
+      - financi_sonar_data:/opt/sonarqube/data
+      - financi_sonar_extensions:/opt/sonarqube/extensions
+      - financi_sonar_logs:/opt/sonarqube/logs
+
+volumes:
+  financi_postgres_data:
+  financi_sonar_data:
+  financi_sonar_extensions:
+  financi_sonar_logs:
