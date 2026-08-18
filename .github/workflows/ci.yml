@@ -15,8 +15,8 @@ jobs:
     runs-on: self-hosted
 
     env:
-      DATABASE_URL: postgresql://financi:financi@localhost:5432/financi_dev?schema=public
-      DATABASE_URL_TEST: postgresql://financi:financi@localhost:5432/financi_test?schema=public
+      DATABASE_URL: postgresql://financi:financi@localhost:5439/financi_dev?schema=public
+      DATABASE_URL_TEST: postgresql://financi:financi@localhost:5439/financi_test?schema=public
       JWT_SECRET: ${{ secrets.JWT_SECRET_TEST || 'ci-test-secret-nao-usar-em-producao' }}
 
     steps:
@@ -64,8 +64,8 @@ jobs:
     runs-on: self-hosted
     needs: test-and-analyze
     env:
-      DATABASE_URL: postgresql://financi:financi@localhost:5432/financi_dev?schema=public
-      DATABASE_URL_TEST: postgresql://financi:financi@localhost:5432/financi_test?schema=public
+      DATABASE_URL: postgresql://financi:financi@localhost:5439/financi_dev?schema=public
+      DATABASE_URL_TEST: postgresql://financi:financi@localhost:5439/financi_test?schema=public
       JWT_SECRET: ${{ secrets.JWT_SECRET_TEST || 'ci-test-secret-nao-usar-em-producao' }}
     steps:
       - name: Checkout
