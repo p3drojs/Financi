@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express, { Express } from 'express';
 import helmet from 'helmet';
+import { env } from './config/env';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { authRouter } from './modules/auth/auth.routes';
 import { categoryRouter } from './modules/categories/category.routes';
@@ -10,11 +11,15 @@ import { healthRouter } from './modules/health/health.routes';
 import { tagRouter } from './modules/tags/tag.routes';
 import { transactionRouter } from './modules/transactions/transaction.routes';
 
+const allowedOrigins = env.CORS_ORIGIN?.split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 export function createApp(): Express {
   const app = express();
 
   app.use(helmet());
-  app.use(cors());
+  app.use(cors({ origin: allowedOrigins && allowedOrigins.length > 0 ? allowedOrigins : false }));
   app.use(express.json());
 
   app.use('/health', healthRouter);
