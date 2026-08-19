@@ -47,6 +47,10 @@ paths:
       tags: [Auth]
       security: []
       summary: Cria um novo usuário
+      description: >
+        Junto com o usuário são criadas as categorias padrão (receita e despesa),
+        para a conta não começar vazia. Elas são categorias comuns e podem ser
+        renomeadas ou excluídas.
       requestBody:
         required: true
         content:

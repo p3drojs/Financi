@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { createApp } from '../../src/app';
 import { createCategory, registerUser } from './helpers';
+import { DEFAULT_CATEGORIES } from '../../src/modules/categories/category.defaults';
 
 const app = createApp();
 
@@ -11,10 +12,10 @@ describe('Categories (e2e)', () => {
     const res = await request(app)
       .post('/categories')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Alimentação', type: 'EXPENSE', color: '#FF0000' });
+      .send({ name: 'Pet', type: 'EXPENSE', color: '#FF0000' });
 
     expect(res.status).toBe(201);
-    expect(res.body.name).toBe('Alimentação');
+    expect(res.body.name).toBe('Pet');
   });
 
   it('rejeita categoria duplicada (mesmo nome + tipo)', async () => {
@@ -23,12 +24,12 @@ describe('Categories (e2e)', () => {
     await request(app)
       .post('/categories')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Salário', type: 'INCOME' });
+      .send({ name: 'Bônus', type: 'INCOME' });
 
     const res = await request(app)
       .post('/categories')
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Salário', type: 'INCOME' });
+      .send({ name: 'Bônus', type: 'INCOME' });
 
     expect(res.status).toBe(409);
   });
@@ -48,9 +49,11 @@ describe('Categories (e2e)', () => {
 
     const res = await request(app).get('/categories').set('Authorization', `Bearer ${userA.token}`);
 
+    const nomes = res.body.map((category: { name: string }) => category.name);
+
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].name).toBe('Do usuário A');
+    expect(nomes).toContain('Do usuário A');
+    expect(nomes).not.toContain('Do usuário B');
   });
 
   it('atualiza nome e cor', async () => {
@@ -93,5 +96,30 @@ describe('Categories (e2e)', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(204);
+  });
+
+  it('cria as categorias padrão no registro do usuário', async () => {
+    const { token } = await registerUser(app);
+
+    const res = await request(app).get('/categories').set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(DEFAULT_CATEGORIES.length);
+    expect(res.body.map((category: { name: string }) => category.name)).toEqual(
+      expect.arrayContaining(['Salário', 'Alimentação', 'Transporte']),
+    );
+  });
+
+  it('cria as categorias padrão já separadas por tipo', async () => {
+    const { token } = await registerUser(app);
+
+    const res = await request(app)
+      .get('/categories?type=INCOME')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.body.length).toBe(
+      DEFAULT_CATEGORIES.filter((category) => category.type === 'INCOME').length,
+    );
+    expect(res.body.every((category: { type: string }) => category.type === 'INCOME')).toBe(true);
   });
 });
