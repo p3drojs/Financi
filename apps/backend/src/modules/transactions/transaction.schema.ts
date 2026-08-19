@@ -70,6 +70,15 @@ export const listTransactionsSchema = z.object({
   }),
 });
 
+export const listRecurrencesSchema = z.object({
+  query: z.object({
+    active: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => (value === undefined ? undefined : value === 'true')),
+  }),
+});
+
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>['body'];
 export type CreateRecurringTransactionInput = z.infer<
   typeof createRecurringTransactionSchema
@@ -79,3 +88,4 @@ export type CreateInstallmentTransactionInput = z.infer<
 >['body'];
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>['body'];
 export type ListTransactionsQuery = z.infer<typeof listTransactionsSchema>['query'];
+export type ListRecurrencesQuery = z.infer<typeof listRecurrencesSchema>['query'];

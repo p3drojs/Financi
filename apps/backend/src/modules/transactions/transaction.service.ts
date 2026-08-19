@@ -9,6 +9,7 @@ import {
   CreateInstallmentTransactionInput,
   CreateRecurringTransactionInput,
   CreateTransactionInput,
+  ListRecurrencesQuery,
   ListTransactionsQuery,
   UpdateTransactionInput,
 } from './transaction.schema';
@@ -208,6 +209,47 @@ export async function updateTransaction(userId: string, id: string, input: Updat
 export async function deleteTransaction(userId: string, id: string) {
   await getTransactionById(userId, id);
   await prisma.transaction.delete({ where: { id } });
+}
+
+export async function listRecurrences(userId: string, query: ListRecurrencesQuery) {
+  const recurrences = await prisma.recurrence.findMany({
+    where: { userId, ...(query.active === undefined ? {} : { active: query.active }) },
+    include: { category: true },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (recurrences.length === 0) {
+    return [];
+  }
+
+  const recurrenceIds = recurrences.map((recurrence) => recurrence.id);
+  const now = new Date();
+
+  const [generated, upcoming] = await Promise.all([
+    prisma.transaction.groupBy({
+      by: ['recurrenceId'],
+      where: { userId, recurrenceId: { in: recurrenceIds } },
+      _count: { _all: true },
+      _max: { date: true },
+    }),
+    prisma.transaction.groupBy({
+      by: ['recurrenceId'],
+      where: { userId, recurrenceId: { in: recurrenceIds }, date: { gt: now } },
+      _count: { _all: true },
+      _min: { date: true },
+    }),
+  ]);
+
+  const generatedByRecurrence = new Map(generated.map((group) => [group.recurrenceId, group]));
+  const upcomingByRecurrence = new Map(upcoming.map((group) => [group.recurrenceId, group]));
+
+  return recurrences.map((recurrence) => ({
+    ...recurrence,
+    generatedCount: generatedByRecurrence.get(recurrence.id)?._count._all ?? 0,
+    lastOccurrenceDate: generatedByRecurrence.get(recurrence.id)?._max.date ?? null,
+    upcomingCount: upcomingByRecurrence.get(recurrence.id)?._count._all ?? 0,
+    nextOccurrenceDate: upcomingByRecurrence.get(recurrence.id)?._min.date ?? null,
+  }));
 }
 
 export async function cancelRecurrence(userId: string, recurrenceId: string) {

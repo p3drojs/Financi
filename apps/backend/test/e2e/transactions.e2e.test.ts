@@ -169,4 +169,62 @@ describe('Transactions (e2e)', () => {
     expect(res.body[0].installmentNumber).toBe(1);
     expect(res.body[2].installmentNumber).toBe(3);
   });
+
+  it('lista as recorrências do usuário com contagem de ocorrências', async () => {
+    const { token } = await registerUser(app);
+    const category = await createCategory(app, token, { type: 'EXPENSE' });
+
+    const created = await request(app)
+      .post('/transactions/recurring')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 19.9,
+        description: 'Academia',
+        startDate: new Date().toISOString(),
+        intervalMonths: 1,
+      });
+
+    const res = await request(app)
+      .get('/transactions/recurring')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].id).toBe(created.body.recurrence.id);
+    expect(res.body[0].category.id).toBe(category.id);
+    expect(res.body[0].generatedCount).toBe(created.body.transactions.length);
+    expect(res.body[0].nextOccurrenceDate).not.toBeNull();
+  });
+
+  it('filtra recorrências por status na listagem', async () => {
+    const { token } = await registerUser(app);
+    const category = await createCategory(app, token, { type: 'EXPENSE' });
+
+    const created = await request(app)
+      .post('/transactions/recurring')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 10,
+        startDate: new Date().toISOString(),
+        intervalMonths: 1,
+      });
+
+    await request(app)
+      .delete(`/transactions/recurring/${created.body.recurrence.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const ativas = await request(app)
+      .get('/transactions/recurring?active=true')
+      .set('Authorization', `Bearer ${token}`);
+    const canceladas = await request(app)
+      .get('/transactions/recurring?active=false')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(ativas.body).toHaveLength(0);
+    expect(canceladas.body).toHaveLength(1);
+  });
 });

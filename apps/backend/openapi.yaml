@@ -286,6 +286,23 @@ paths:
           description: Excluída com sucesso
 
   /transactions/recurring:
+    get:
+      tags: [Transactions]
+      summary: Lista as recorrências do usuário
+      parameters:
+        - name: active
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+          description: Filtra por recorrências ativas ou canceladas. Omitido, retorna todas.
+      responses:
+        '200':
+          description: Lista de recorrências
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecurrenceListItem'
     post:
       tags: [Transactions]
       summary: Cria uma transação recorrente (gera um lote de ocorrências pré-geradas)
@@ -551,3 +568,19 @@ components:
         endDate: { type: string, format: date-time, nullable: true }
         occurrences: { type: integer, nullable: true }
         active: { type: boolean }
+
+    RecurrenceListItem:
+      allOf:
+        - $ref: '#/components/schemas/Recurrence'
+        - type: object
+          properties:
+            category:
+              $ref: '#/components/schemas/Category'
+            generatedCount:
+              type: integer
+              description: Total de ocorrências já geradas
+            lastOccurrenceDate: { type: string, format: date-time, nullable: true }
+            upcomingCount:
+              type: integer
+              description: Ocorrências futuras ainda não vencidas
+            nextOccurrenceDate: { type: string, format: date-time, nullable: true }
