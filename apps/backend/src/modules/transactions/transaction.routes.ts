@@ -7,6 +7,7 @@ import {
   createRecurringTransactionHandler,
   createTransactionHandler,
   deleteTransactionHandler,
+  getInstallmentGroupHandler,
   getTransactionHandler,
   listRecurrencesHandler,
   listTransactionsHandler,
@@ -17,6 +18,7 @@ import {
   createInstallmentTransactionSchema,
   createRecurringTransactionSchema,
   createTransactionSchema,
+  installmentGroupParamSchema,
   listRecurrencesSchema,
   listTransactionsSchema,
   recurrenceIdParamSchema,
@@ -42,6 +44,11 @@ transactionRouter.post(
 );
 transactionRouter.get('/', validate(listTransactionsSchema), listTransactionsHandler);
 transactionRouter.get('/recurring', validate(listRecurrencesSchema), listRecurrencesHandler);
+transactionRouter.get(
+  '/installments/:groupId',
+  validate(installmentGroupParamSchema),
+  getInstallmentGroupHandler,
+);
 transactionRouter.get('/:id', validate(transactionIdParamSchema), getTransactionHandler);
 transactionRouter.patch('/:id', validate(updateTransactionSchema), updateTransactionHandler);
 transactionRouter.delete('/:id', validate(transactionIdParamSchema), deleteTransactionHandler);

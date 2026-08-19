@@ -72,6 +72,12 @@ export const recurrenceIdParamSchema = z.object({
   }),
 });
 
+export const installmentGroupParamSchema = z.object({
+  params: z.object({
+    groupId: z.string().uuid(),
+  }),
+});
+
 export const listTransactionsSchema = z.object({
   query: z.object({
     dateFrom: z.coerce.date().optional(),

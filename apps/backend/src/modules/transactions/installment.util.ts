@@ -30,3 +30,38 @@ export function generateInstallmentDates(startDate: Date, count: number): Date[]
   }
   return dates;
 }
+
+export interface InstallmentEntry {
+  amount: Prisma.Decimal.Value;
+  date: Date;
+}
+
+export interface InstallmentGroupSummary {
+  installmentsGenerated: number;
+  paidCount: number;
+  remainingCount: number;
+  totalAmount: Prisma.Decimal;
+  paidAmount: Prisma.Decimal;
+  remainingAmount: Prisma.Decimal;
+}
+
+export function summarizeInstallments(
+  entries: InstallmentEntry[],
+  now = new Date(),
+): InstallmentGroupSummary {
+  const sum = (items: InstallmentEntry[]) =>
+    items.reduce((total, item) => total.plus(item.amount), new Prisma.Decimal(0));
+
+  const paid = entries.filter((entry) => entry.date <= now);
+  const totalAmount = sum(entries);
+  const paidAmount = sum(paid);
+
+  return {
+    installmentsGenerated: entries.length,
+    paidCount: paid.length,
+    remainingCount: entries.length - paid.length,
+    totalAmount,
+    paidAmount,
+    remainingAmount: totalAmount.minus(paidAmount),
+  };
+}

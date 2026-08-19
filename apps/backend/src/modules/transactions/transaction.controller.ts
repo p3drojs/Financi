@@ -63,6 +63,22 @@ export async function listTransactionsHandler(
   }
 }
 
+export async function getInstallmentGroupHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const group = await transactionService.getInstallmentGroup(
+      req.userId as string,
+      req.params.groupId as string,
+    );
+    res.status(200).json(group);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getTransactionHandler(
   req: Request,
   res: Response,

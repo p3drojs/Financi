@@ -3,7 +3,11 @@ import { Prisma, Recurrence } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { findOrCreateTags } from '../tags/tag.service';
 import { AppError, ConflictError, NotFoundError } from '../../utils/AppError';
-import { generateInstallmentDates, splitInstallments } from './installment.util';
+import {
+  generateInstallmentDates,
+  splitInstallments,
+  summarizeInstallments,
+} from './installment.util';
 import { generateRecurrenceDates, pendingRecurrenceDates } from './recurrence.util';
 import {
   CreateInstallmentTransactionInput,
@@ -219,6 +223,31 @@ export async function listTransactions(userId: string, query: ListTransactionsQu
   ]);
 
   return { items, total, page: query.page, pageSize: query.pageSize };
+}
+
+export async function getInstallmentGroup(userId: string, groupId: string) {
+  const transactions = await prisma.transaction.findMany({
+    where: { userId, installmentGroupId: groupId },
+    include: transactionInclude,
+    orderBy: { installmentNumber: 'asc' },
+  });
+
+  const first = transactions[0];
+
+  if (!first) {
+    throw new NotFoundError('Parcelamento não encontrado');
+  }
+
+  return {
+    installmentGroupId: groupId,
+    categoryId: first.categoryId,
+    category: first.category,
+    type: first.type,
+    description: first.description,
+    installmentTotal: first.installmentTotal ?? transactions.length,
+    ...summarizeInstallments(transactions),
+    transactions,
+  };
 }
 
 export async function getTransactionById(userId: string, id: string) {

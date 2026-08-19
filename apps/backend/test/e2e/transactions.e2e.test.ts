@@ -394,4 +394,72 @@ describe('Transactions (e2e)', () => {
 
     expect(res.status).toBe(409);
   });
+
+  it('mostra o grupo de parcelamento com quantas já venceram', async () => {
+    const { token } = await registerUser(app);
+    const category = await createCategory(app, token, { type: 'EXPENSE' });
+
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 1);
+
+    const created = await request(app)
+      .post('/transactions/installments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 100,
+        description: 'Notebook',
+        startDate: startDate.toISOString(),
+        installmentTotal: 5,
+      });
+
+    const groupId = created.body[0].installmentGroupId;
+
+    const res = await request(app)
+      .get(`/transactions/installments/${groupId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.installmentGroupId).toBe(groupId);
+    expect(res.body.installmentTotal).toBe(5);
+    expect(res.body.paidCount).toBe(2);
+    expect(res.body.remainingCount).toBe(3);
+    expect(Number(res.body.totalAmount)).toBeCloseTo(100);
+    expect(res.body.transactions).toHaveLength(5);
+    expect(res.body.category.id).toBe(category.id);
+  });
+
+  it('retorna 404 para grupo de parcelamento inexistente', async () => {
+    const { token } = await registerUser(app);
+
+    const res = await request(app)
+      .get('/transactions/installments/3f1b6a9c-2f3a-4c1e-9a7b-0d5e6f7a8b9c')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('não expõe o parcelamento de outro usuário', async () => {
+    const dono = await registerUser(app);
+    const intruso = await registerUser(app);
+    const category = await createCategory(app, dono.token, { type: 'EXPENSE' });
+
+    const created = await request(app)
+      .post('/transactions/installments')
+      .set('Authorization', `Bearer ${dono.token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 60,
+        startDate: new Date().toISOString(),
+        installmentTotal: 3,
+      });
+
+    const res = await request(app)
+      .get(`/transactions/installments/${created.body[0].installmentGroupId}`)
+      .set('Authorization', `Bearer ${intruso.token}`);
+
+    expect(res.status).toBe(404);
+  });
 });
