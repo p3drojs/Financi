@@ -339,14 +339,46 @@ paths:
                       $ref: '#/components/schemas/Transaction'
 
   /transactions/recurring/{recurrenceId}:
+    parameters:
+      - name: recurrenceId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Transactions]
+      summary: Edita o template de uma recorrência ativa (vale só para ocorrências futuras)
+      description: >
+        Alterações de valor, categoria ou descrição são aplicadas nas ocorrências
+        futuras existentes. Alterar intervalMonths, endDate ou occurrences
+        regera as ocorrências futuras a partir do novo cronograma. Ocorrências
+        passadas nunca são tocadas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecurrenceInput'
+      responses:
+        '200':
+          description: Recorrência atualizada com as ocorrências futuras resultantes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recurrence:
+                    $ref: '#/components/schemas/Recurrence'
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+        '404':
+          description: Recorrência não encontrada
+        '409':
+          description: Recorrência cancelada não pode ser editada
     delete:
       tags: [Transactions]
       summary: Cancela uma recorrência (remove só ocorrências futuras, preserva histórico)
-      parameters:
-        - name: recurrenceId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
       responses:
         '204':
           description: Recorrência cancelada
@@ -592,3 +624,13 @@ components:
               type: integer
               description: Ocorrências futuras ainda não vencidas
             nextOccurrenceDate: { type: string, format: date-time, nullable: true }
+
+    UpdateRecurrenceInput:
+      type: object
+      properties:
+        categoryId: { type: string, format: uuid }
+        amount: { type: number }
+        description: { type: string }
+        intervalMonths: { type: integer, minimum: 1, maximum: 60 }
+        endDate: { type: string, format: date-time, nullable: true }
+        occurrences: { type: integer, minimum: 1, maximum: 600, nullable: true }

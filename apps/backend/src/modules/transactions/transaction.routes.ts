@@ -10,6 +10,7 @@ import {
   getTransactionHandler,
   listRecurrencesHandler,
   listTransactionsHandler,
+  updateRecurrenceHandler,
   updateTransactionHandler,
 } from './transaction.controller';
 import {
@@ -20,6 +21,7 @@ import {
   listTransactionsSchema,
   recurrenceIdParamSchema,
   transactionIdParamSchema,
+  updateRecurrenceSchema,
   updateTransactionSchema,
 } from './transaction.schema';
 
@@ -43,6 +45,11 @@ transactionRouter.get('/recurring', validate(listRecurrencesSchema), listRecurre
 transactionRouter.get('/:id', validate(transactionIdParamSchema), getTransactionHandler);
 transactionRouter.patch('/:id', validate(updateTransactionSchema), updateTransactionHandler);
 transactionRouter.delete('/:id', validate(transactionIdParamSchema), deleteTransactionHandler);
+transactionRouter.patch(
+  '/recurring/:recurrenceId',
+  validate(updateRecurrenceSchema),
+  updateRecurrenceHandler,
+);
 transactionRouter.delete(
   '/recurring/:recurrenceId',
   validate(recurrenceIdParamSchema),

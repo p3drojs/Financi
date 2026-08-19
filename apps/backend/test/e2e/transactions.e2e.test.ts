@@ -298,4 +298,100 @@ describe('Transactions (e2e)', () => {
 
     expect(ocorrencias.length).toBeLessThanOrEqual(1);
   });
+
+  it('edita o template da recorrência aplicando só nas ocorrências futuras', async () => {
+    const { token } = await registerUser(app);
+    const category = await createCategory(app, token, { type: 'EXPENSE' });
+
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 2);
+
+    const created = await request(app)
+      .post('/transactions/recurring')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 50,
+        description: 'Internet',
+        startDate: startDate.toISOString(),
+        intervalMonths: 1,
+      });
+
+    const recurrenceId = created.body.recurrence.id;
+    const passada = created.body.transactions[0];
+
+    const res = await request(app)
+      .patch(`/transactions/recurring/${recurrenceId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: 79.9, description: 'Internet 600MB' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.recurrence.amount).toBe('79.9');
+    expect(res.body.transactions.every((t: { amount: string }) => t.amount === '79.9')).toBe(true);
+
+    const antiga = await request(app)
+      .get(`/transactions/${passada.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(antiga.body.amount).toBe('50');
+    expect(antiga.body.description).toBe('Internet');
+  });
+
+  it('regera as ocorrências futuras quando o cronograma muda', async () => {
+    const { token } = await registerUser(app);
+    const category = await createCategory(app, token, { type: 'EXPENSE' });
+
+    const created = await request(app)
+      .post('/transactions/recurring')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 20,
+        startDate: new Date().toISOString(),
+        intervalMonths: 1,
+      });
+
+    const recurrenceId = created.body.recurrence.id;
+
+    const res = await request(app)
+      .patch(`/transactions/recurring/${recurrenceId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ intervalMonths: 6 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.recurrence.intervalMonths).toBe(6);
+    expect(res.body.transactions.length).toBeLessThan(created.body.transactions.length);
+    expect(res.body.transactions.every((t: { date: string }) => new Date(t.date) > new Date())).toBe(
+      true,
+    );
+  });
+
+  it('rejeita edição de recorrência cancelada', async () => {
+    const { token } = await registerUser(app);
+    const category = await createCategory(app, token, { type: 'EXPENSE' });
+
+    const created = await request(app)
+      .post('/transactions/recurring')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 20,
+        startDate: new Date().toISOString(),
+        intervalMonths: 1,
+      });
+
+    await request(app)
+      .delete(`/transactions/recurring/${created.body.recurrence.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const res = await request(app)
+      .patch(`/transactions/recurring/${created.body.recurrence.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: 30 });
+
+    expect(res.status).toBe(409);
+  });
 });

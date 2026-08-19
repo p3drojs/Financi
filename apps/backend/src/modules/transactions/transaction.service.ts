@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma, Recurrence } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { findOrCreateTags } from '../tags/tag.service';
-import { AppError, NotFoundError } from '../../utils/AppError';
+import { AppError, ConflictError, NotFoundError } from '../../utils/AppError';
 import { generateInstallmentDates, splitInstallments } from './installment.util';
 import { generateRecurrenceDates, pendingRecurrenceDates } from './recurrence.util';
 import {
@@ -11,6 +11,7 @@ import {
   CreateTransactionInput,
   ListRecurrencesQuery,
   ListTransactionsQuery,
+  UpdateRecurrenceInput,
   UpdateTransactionInput,
 } from './transaction.schema';
 
@@ -308,14 +309,113 @@ export async function listRecurrences(userId: string, query: ListRecurrencesQuer
   }));
 }
 
-export async function cancelRecurrence(userId: string, recurrenceId: string) {
-  const recurrence = await prisma.recurrence.findFirst({
-    where: { id: recurrenceId, userId },
-  });
+async function findRecurrenceOrFail(userId: string, recurrenceId: string) {
+  const recurrence = await prisma.recurrence.findFirst({ where: { id: recurrenceId, userId } });
 
   if (!recurrence) {
     throw new NotFoundError('Recorrência não encontrada');
   }
+
+  return recurrence;
+}
+
+async function rescheduleFutureOccurrences(recurrence: Recurrence, now: Date) {
+  const reference = await prisma.transaction.findFirst({
+    where: { recurrenceId: recurrence.id },
+    orderBy: { date: 'asc' },
+    include: { tags: true },
+  });
+
+  const tagIds = reference?.tags.map((tag) => tag.tagId) ?? [];
+
+  const dates = generateRecurrenceDates({
+    startDate: recurrence.startDate,
+    intervalMonths: recurrence.intervalMonths,
+    endDate: recurrence.endDate,
+    occurrences: recurrence.occurrences,
+    now,
+  }).filter((date) => date > now);
+
+  await prisma.$transaction([
+    prisma.transaction.deleteMany({ where: { recurrenceId: recurrence.id, date: { gt: now } } }),
+    ...dates.map((date) =>
+      prisma.transaction.create({
+        data: {
+          userId: recurrence.userId,
+          categoryId: recurrence.categoryId,
+          type: recurrence.type,
+          amount: recurrence.amount,
+          description: recurrence.description,
+          date,
+          recurrenceId: recurrence.id,
+          tags: { create: tagIds.map((tagId) => ({ tagId })) },
+        },
+      }),
+    ),
+  ]);
+}
+
+export async function updateRecurrence(
+  userId: string,
+  recurrenceId: string,
+  input: UpdateRecurrenceInput,
+) {
+  const recurrence = await findRecurrenceOrFail(userId, recurrenceId);
+
+  if (!recurrence.active) {
+    throw new ConflictError('Recorrência cancelada não pode ser editada');
+  }
+
+  if (input.categoryId) {
+    await assertCategoryMatches(userId, input.categoryId, recurrence.type);
+  }
+
+  const updated = await prisma.recurrence.update({
+    where: { id: recurrenceId },
+    data: {
+      categoryId: input.categoryId,
+      amount: input.amount,
+      description: input.description,
+      intervalMonths: input.intervalMonths,
+      endDate: input.endDate,
+      occurrences: input.occurrences,
+    },
+  });
+
+  const now = new Date();
+  const scheduleChanged =
+    input.intervalMonths !== undefined ||
+    input.endDate !== undefined ||
+    input.occurrences !== undefined;
+  const valuesChanged =
+    input.categoryId !== undefined ||
+    input.amount !== undefined ||
+    input.description !== undefined;
+
+  if (scheduleChanged) {
+    await rescheduleFutureOccurrences(updated, now);
+  } else if (valuesChanged) {
+    await prisma.transaction.updateMany({
+      where: { recurrenceId, date: { gt: now } },
+      data: {
+        categoryId: input.categoryId,
+        amount: input.amount,
+        description: input.description,
+      },
+    });
+  }
+
+  const transactions = await prisma.transaction.findMany({
+    where: { recurrenceId, date: { gt: now } },
+    include: transactionInclude,
+    orderBy: { date: 'asc' },
+  });
+
+  return { recurrence: updated, transactions };
+}
+
+export async function cancelRecurrence(userId: string, recurrenceId: string) {
+  await findRecurrenceOrFail(userId, recurrenceId);
 
   await prisma.$transaction([
     prisma.transaction.deleteMany({

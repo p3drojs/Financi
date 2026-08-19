@@ -125,6 +125,23 @@ export async function listRecurrencesHandler(
   }
 }
 
+export async function updateRecurrenceHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const result = await transactionService.updateRecurrence(
+      req.userId as string,
+      req.params.recurrenceId as string,
+      req.body,
+    );
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function cancelRecurrenceHandler(
   req: Request,
   res: Response,
