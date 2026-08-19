@@ -12,11 +12,23 @@ tags:
     description: Status da API
   - name: Auth
     description: Cadastro e autenticação de usuário
+  - name: Categories
+    description: Categorias de receita/despesa
+  - name: Tags
+    description: Tags livres aplicadas a transações
+  - name: Transactions
+    description: Transações, recorrências e parcelamentos
+  - name: Dashboard
+    description: Agregações e relatórios
+
+security:
+  - bearerAuth: []
 
 paths:
   /health:
     get:
       tags: [Health]
+      security: []
       summary: Verifica se a API está no ar
       responses:
         '200':
@@ -33,6 +45,7 @@ paths:
   /auth/register:
     post:
       tags: [Auth]
+      security: []
       summary: Cria um novo usuário
       requestBody:
         required: true
@@ -55,6 +68,7 @@ paths:
   /auth/login:
     post:
       tags: [Auth]
+      security: []
       summary: Autentica um usuário existente
       requestBody:
         required: true
@@ -72,6 +86,322 @@ paths:
         '401':
           description: Email ou senha inválidos
 
+  /categories:
+    get:
+      tags: [Categories]
+      summary: Lista as categorias do usuário autenticado
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+      responses:
+        '200':
+          description: Lista de categorias
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+    post:
+      tags: [Categories]
+      summary: Cria uma categoria
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryInput'
+      responses:
+        '201':
+          description: Categoria criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '409':
+          description: Já existe categoria com esse nome+tipo
+
+  /categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Categories]
+      summary: Busca uma categoria por id
+      responses:
+        '200':
+          description: Categoria encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          description: Categoria não encontrada
+    patch:
+      tags: [Categories]
+      summary: Atualiza nome/cor de uma categoria
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                color:
+                  type: string
+      responses:
+        '200':
+          description: Categoria atualizada
+    delete:
+      tags: [Categories]
+      summary: Exclui uma categoria (bloqueado se estiver em uso)
+      responses:
+        '204':
+          description: Excluída com sucesso
+        '409':
+          description: Categoria em uso por transações/recorrências
+
+  /tags:
+    get:
+      tags: [Tags]
+      summary: Lista as tags do usuário autenticado
+      responses:
+        '200':
+          description: Lista de tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+
+  /tags/{id}:
+    delete:
+      tags: [Tags]
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      summary: Exclui uma tag (bloqueado se estiver em uso)
+      responses:
+        '204':
+          description: Excluída com sucesso
+        '409':
+          description: Tag em uso por transações
+
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: Lista transações do usuário, com filtros e paginação
+      parameters:
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date-time }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date-time }
+        - name: categoryId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+        - name: tag
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Página de transações
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+    post:
+      tags: [Transactions]
+      summary: Cria uma transação única
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionInput'
+      responses:
+        '201':
+          description: Transação criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Tipo da transação não bate com o tipo da categoria
+
+  /transactions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Transactions]
+      summary: Busca uma transação por id
+      responses:
+        '200':
+          description: Transação encontrada
+    patch:
+      tags: [Transactions]
+      summary: Edita uma transação (afeta só essa ocorrência, mesmo se for recorrente/parcelada)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                categoryId: { type: string, format: uuid }
+                amount: { type: number }
+                description: { type: string }
+                date: { type: string, format: date-time }
+                tagNames:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200':
+          description: Transação atualizada
+    delete:
+      tags: [Transactions]
+      summary: Exclui uma transação (só essa ocorrência)
+      responses:
+        '204':
+          description: Excluída com sucesso
+
+  /transactions/recurring:
+    post:
+      tags: [Transactions]
+      summary: Cria uma transação recorrente (gera um lote de ocorrências pré-geradas)
+      description: >
+        Gera imediatamente as ocorrências futuras (Transaction) até o menor entre:
+        endDate, occurrences ou uma janela de 12 meses a partir de hoje.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRecurringTransactionInput'
+      responses:
+        '201':
+          description: Recorrência criada com o lote de transações geradas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recurrence:
+                    $ref: '#/components/schemas/Recurrence'
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+
+  /transactions/recurring/{recurrenceId}:
+    delete:
+      tags: [Transactions]
+      summary: Cancela uma recorrência (remove só ocorrências futuras, preserva histórico)
+      parameters:
+        - name: recurrenceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Recorrência cancelada
+        '404':
+          description: Recorrência não encontrada
+
+  /transactions/installments:
+    post:
+      tags: [Transactions]
+      summary: Cria uma compra parcelada (gera N transações com o valor total dividido)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInstallmentTransactionInput'
+      responses:
+        '201':
+          description: Parcelas criadas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+
+  /dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: Total de receitas, despesas e saldo num período
+      parameters:
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date-time }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Resumo financeiro
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalIncome: { type: string }
+                  totalExpense: { type: string }
+                  balance: { type: string }
+
+  /dashboard/by-category:
+    get:
+      tags: [Dashboard]
+      summary: Total gasto/recebido agrupado por categoria
+      parameters:
+        - name: dateFrom
+          in: query
+          schema: { type: string, format: date-time }
+        - name: dateTo
+          in: query
+          schema: { type: string, format: date-time }
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TransactionType'
+      responses:
+        '200':
+          description: Totais por categoria
+
+  /dashboard/balance-evolution:
+    get:
+      tags: [Dashboard]
+      summary: Evolução de receita/despesa/saldo mês a mês
+      parameters:
+        - name: months
+          in: query
+          schema: { type: integer, default: 6 }
+      responses:
+        '200':
+          description: Série mensal de receita/despesa/saldo
+
 components:
   securitySchemes:
     bearerAuth:
@@ -79,7 +409,20 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
   schemas:
+    TransactionType:
+      type: string
+      enum: [INCOME, EXPENSE]
+
     RegisterInput:
       type: object
       required: [email, password]
@@ -121,3 +464,90 @@ components:
         token:
           type: string
           description: JWT de acesso
+
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        color: { type: string, nullable: true }
+
+    CreateCategoryInput:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string }
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        color: { type: string }
+
+    Tag:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+
+    Transaction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        categoryId: { type: string, format: uuid }
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        amount: { type: string }
+        description: { type: string, nullable: true }
+        date: { type: string, format: date-time }
+        recurrenceId: { type: string, format: uuid, nullable: true }
+        installmentGroupId: { type: string, format: uuid, nullable: true }
+        installmentNumber: { type: integer, nullable: true }
+        installmentTotal: { type: integer, nullable: true }
+
+    CreateTransactionInput:
+      type: object
+      required: [categoryId, type, amount, date]
+      properties:
+        categoryId: { type: string, format: uuid }
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        amount: { type: number }
+        description: { type: string }
+        date: { type: string, format: date-time }
+        tagNames:
+          type: array
+          items: { type: string }
+
+    CreateRecurringTransactionInput:
+      allOf:
+        - $ref: '#/components/schemas/CreateTransactionInput'
+        - type: object
+          required: [startDate, intervalMonths]
+          properties:
+            startDate: { type: string, format: date-time }
+            intervalMonths: { type: integer, minimum: 1, maximum: 60 }
+            endDate: { type: string, format: date-time }
+            occurrences: { type: integer, minimum: 1, maximum: 600 }
+
+    CreateInstallmentTransactionInput:
+      allOf:
+        - $ref: '#/components/schemas/CreateTransactionInput'
+        - type: object
+          required: [startDate, installmentTotal]
+          properties:
+            startDate: { type: string, format: date-time }
+            installmentTotal: { type: integer, minimum: 2, maximum: 60 }
+
+    Recurrence:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        categoryId: { type: string, format: uuid }
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        amount: { type: string }
+        intervalMonths: { type: integer }
+        startDate: { type: string, format: date-time }
+        endDate: { type: string, format: date-time, nullable: true }
+        occurrences: { type: integer, nullable: true }
+        active: { type: boolean }

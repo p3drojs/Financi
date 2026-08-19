@@ -1,0 +1,231 @@
+import { randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../../config/prisma';
+import { findOrCreateTags } from '../tags/tag.service';
+import { AppError, NotFoundError } from '../../utils/AppError';
+import { generateInstallmentDates, splitInstallments } from './installment.util';
+import { generateRecurrenceDates } from './recurrence.util';
+import {
+  CreateInstallmentTransactionInput,
+  CreateRecurringTransactionInput,
+  CreateTransactionInput,
+  ListTransactionsQuery,
+  UpdateTransactionInput,
+} from './transaction.schema';
+
+const transactionInclude = {
+  category: true,
+  tags: { include: { tag: true } },
+};
+
+async function assertCategoryMatches(userId: string, categoryId: string, type: string) {
+  const category = await prisma.category.findFirst({ where: { id: categoryId, userId } });
+
+  if (!category) {
+    throw new NotFoundError('Categoria não encontrada');
+  }
+
+  if (category.type !== type) {
+    throw new AppError('O tipo da categoria não corresponde ao tipo da transação', 400);
+  }
+
+  return category;
+}
+
+export async function createTransaction(userId: string, input: CreateTransactionInput) {
+  await assertCategoryMatches(userId, input.categoryId, input.type);
+  const tags = await findOrCreateTags(userId, input.tagNames ?? []);
+
+  return prisma.transaction.create({
+    data: {
+      userId,
+      categoryId: input.categoryId,
+      type: input.type,
+      amount: input.amount,
+      description: input.description,
+      date: input.date,
+      tags: { create: tags.map((tag) => ({ tagId: tag.id })) },
+    },
+    include: transactionInclude,
+  });
+}
+
+export async function createRecurringTransaction(
+  userId: string,
+  input: CreateRecurringTransactionInput,
+) {
+  await assertCategoryMatches(userId, input.categoryId, input.type);
+  const tags = await findOrCreateTags(userId, input.tagNames ?? []);
+
+  const dates = generateRecurrenceDates({
+    startDate: input.startDate,
+    intervalMonths: input.intervalMonths,
+    endDate: input.endDate,
+    occurrences: input.occurrences,
+  });
+
+  return prisma.$transaction(async (tx) => {
+    const recurrence = await tx.recurrence.create({
+      data: {
+        userId,
+        categoryId: input.categoryId,
+        type: input.type,
+        amount: input.amount,
+        description: input.description,
+        intervalMonths: input.intervalMonths,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        occurrences: input.occurrences,
+      },
+    });
+
+    const transactions = await Promise.all(
+      dates.map((date) =>
+        tx.transaction.create({
+          data: {
+            userId,
+            categoryId: input.categoryId,
+            type: input.type,
+            amount: input.amount,
+            description: input.description,
+            date,
+            recurrenceId: recurrence.id,
+            tags: { create: tags.map((tag) => ({ tagId: tag.id })) },
+          },
+          include: transactionInclude,
+        }),
+      ),
+    );
+
+    return { recurrence, transactions };
+  });
+}
+
+export async function createInstallmentTransaction(
+  userId: string,
+  input: CreateInstallmentTransactionInput,
+) {
+  await assertCategoryMatches(userId, input.categoryId, input.type);
+  const tags = await findOrCreateTags(userId, input.tagNames ?? []);
+
+  const dates = generateInstallmentDates(input.startDate, input.installmentTotal);
+  const amounts = splitInstallments(input.amount, input.installmentTotal);
+  const installmentGroupId = randomUUID();
+
+  const transactions = await prisma.$transaction(
+    dates.map((date, index) =>
+      prisma.transaction.create({
+        data: {
+          userId,
+          categoryId: input.categoryId,
+          type: input.type,
+          amount: amounts[index] as Prisma.Decimal,
+          description: input.description,
+          date,
+          installmentGroupId,
+          installmentNumber: index + 1,
+          installmentTotal: input.installmentTotal,
+          tags: { create: tags.map((tag) => ({ tagId: tag.id })) },
+        },
+        include: transactionInclude,
+      }),
+    ),
+  );
+
+  return transactions;
+}
+
+export async function listTransactions(userId: string, query: ListTransactionsQuery) {
+  const where = {
+    userId,
+    ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+    ...(query.type ? { type: query.type } : {}),
+    ...(query.dateFrom || query.dateTo
+      ? {
+          date: {
+            ...(query.dateFrom ? { gte: query.dateFrom } : {}),
+            ...(query.dateTo ? { lte: query.dateTo } : {}),
+          },
+        }
+      : {}),
+    ...(query.tag ? { tags: { some: { tag: { name: query.tag } } } } : {}),
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      include: transactionInclude,
+      orderBy: { date: 'desc' },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    }),
+    prisma.transaction.count({ where }),
+  ]);
+
+  return { items, total, page: query.page, pageSize: query.pageSize };
+}
+
+export async function getTransactionById(userId: string, id: string) {
+  const transaction = await prisma.transaction.findFirst({
+    where: { id, userId },
+    include: transactionInclude,
+  });
+
+  if (!transaction) {
+    throw new NotFoundError('Transação não encontrada');
+  }
+
+  return transaction;
+}
+
+export async function updateTransaction(userId: string, id: string, input: UpdateTransactionInput) {
+  const transaction = await getTransactionById(userId, id);
+
+  if (input.categoryId) {
+    await assertCategoryMatches(userId, input.categoryId, transaction.type);
+  }
+
+  if (input.tagNames) {
+    const tags = await findOrCreateTags(userId, input.tagNames);
+    await prisma.transactionTag.deleteMany({ where: { transactionId: id } });
+    await prisma.transactionTag.createMany({
+      data: tags.map((tag) => ({ transactionId: id, tagId: tag.id })),
+    });
+  }
+
+  return prisma.transaction.update({
+    where: { id },
+    data: {
+      categoryId: input.categoryId,
+      amount: input.amount,
+      description: input.description,
+      date: input.date,
+    },
+    include: transactionInclude,
+  });
+}
+
+export async function deleteTransaction(userId: string, id: string) {
+  await getTransactionById(userId, id);
+  await prisma.transaction.delete({ where: { id } });
+}
+
+export async function cancelRecurrence(userId: string, recurrenceId: string) {
+  const recurrence = await prisma.recurrence.findFirst({
+    where: { id: recurrenceId, userId },
+  });
+
+  if (!recurrence) {
+    throw new NotFoundError('Recorrência não encontrada');
+  }
+
+  await prisma.$transaction([
+    prisma.transaction.deleteMany({
+      where: { recurrenceId, date: { gt: new Date() } },
+    }),
+    prisma.recurrence.update({
+      where: { id: recurrenceId },
+      data: { active: false },
+    }),
+  ]);
+}

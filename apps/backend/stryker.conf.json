@@ -14,6 +14,8 @@
   },
   "mutate": [
     "src/modules/**/*.service.ts",
+    "src/modules/transactions/recurrence.util.ts",
+    "src/modules/transactions/installment.util.ts",
     "src/utils/password.ts",
     "src/utils/jwt.ts",
     "!src/**/*.test.ts"
