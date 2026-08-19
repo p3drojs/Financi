@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma, Recurrence } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { findOrCreateTags } from '../tags/tag.service';
 import { AppError, NotFoundError } from '../../utils/AppError';
 import { generateInstallmentDates, splitInstallments } from './installment.util';
-import { generateRecurrenceDates } from './recurrence.util';
+import { generateRecurrenceDates, pendingRecurrenceDates } from './recurrence.util';
 import {
   CreateInstallmentTransactionInput,
   CreateRecurringTransactionInput,
@@ -31,6 +31,58 @@ async function assertCategoryMatches(userId: string, categoryId: string, type: s
   }
 
   return category;
+}
+
+async function extendRecurrenceBatch(recurrence: Recurrence, now: Date): Promise<number> {
+  const lastOccurrence = await prisma.transaction.findFirst({
+    where: { recurrenceId: recurrence.id },
+    orderBy: { date: 'desc' },
+    include: { tags: true },
+  });
+
+  const dates = pendingRecurrenceDates({
+    startDate: recurrence.startDate,
+    intervalMonths: recurrence.intervalMonths,
+    endDate: recurrence.endDate,
+    occurrences: recurrence.occurrences,
+    now,
+    generatedThrough: lastOccurrence?.date,
+  });
+
+  if (dates.length === 0) {
+    return 0;
+  }
+
+  const tagIds = lastOccurrence?.tags.map((tag) => tag.tagId) ?? [];
+
+  await prisma.$transaction(
+    dates.map((date) =>
+      prisma.transaction.create({
+        data: {
+          userId: recurrence.userId,
+          categoryId: recurrence.categoryId,
+          type: recurrence.type,
+          amount: recurrence.amount,
+          description: recurrence.description,
+          date,
+          recurrenceId: recurrence.id,
+          tags: { create: tagIds.map((tagId) => ({ tagId })) },
+        },
+      }),
+    ),
+  );
+
+  return dates.length;
+}
+
+export async function extendActiveRecurrences(userId: string, now = new Date()): Promise<number> {
+  const recurrences = await prisma.recurrence.findMany({ where: { userId, active: true } });
+
+  const generated = await Promise.all(
+    recurrences.map((recurrence) => extendRecurrenceBatch(recurrence, now)),
+  );
+
+  return generated.reduce((total, count) => total + count, 0);
 }
 
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
@@ -137,6 +189,8 @@ export async function createInstallmentTransaction(
 }
 
 export async function listTransactions(userId: string, query: ListTransactionsQuery) {
+  await extendActiveRecurrences(userId);
+
   const where = {
     userId,
     ...(query.categoryId ? { categoryId: query.categoryId } : {}),
@@ -212,6 +266,8 @@ export async function deleteTransaction(userId: string, id: string) {
 }
 
 export async function listRecurrences(userId: string, query: ListRecurrencesQuery) {
+  await extendActiveRecurrences(userId);
+
   const recurrences = await prisma.recurrence.findMany({
     where: { userId, ...(query.active === undefined ? {} : { active: query.active }) },
     include: { category: true },

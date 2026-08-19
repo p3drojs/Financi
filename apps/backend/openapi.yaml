@@ -193,6 +193,9 @@ paths:
     get:
       tags: [Transactions]
       summary: Lista transações do usuário, com filtros e paginação
+      description: >
+        Antes de responder, estende o lote das recorrências ativas que ficaram
+        para trás da janela de 12 meses, criando as ocorrências que faltam.
       parameters:
         - name: dateFrom
           in: query
@@ -289,6 +292,9 @@ paths:
     get:
       tags: [Transactions]
       summary: Lista as recorrências do usuário
+      description: >
+        Antes de responder, estende o lote das recorrências ativas que ficaram
+        para trás da janela de 12 meses.
       parameters:
         - name: active
           in: query
@@ -308,7 +314,9 @@ paths:
       summary: Cria uma transação recorrente (gera um lote de ocorrências pré-geradas)
       description: >
         Gera imediatamente as ocorrências futuras (Transaction) até o menor entre:
-        endDate, occurrences ou uma janela de 12 meses a partir de hoje.
+        endDate, occurrences ou uma janela de 12 meses a partir de hoje. O lote é
+        estendido depois, sob demanda, na leitura de /transactions e
+        /transactions/recurring.
       requestBody:
         required: true
         content:

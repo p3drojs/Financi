@@ -1,5 +1,6 @@
 import request from 'supertest';
 import { createApp } from '../../src/app';
+import { prisma } from '../../src/config/prisma';
 import { createCategory, registerUser } from './helpers';
 
 const app = createApp();
@@ -226,5 +227,75 @@ describe('Transactions (e2e)', () => {
 
     expect(ativas.body).toHaveLength(0);
     expect(canceladas.body).toHaveLength(1);
+  });
+
+  it('reabastece o lote de ocorrências de uma recorrência ativa na leitura', async () => {
+    const { token } = await registerUser(app);
+    const category = await createCategory(app, token, { type: 'EXPENSE' });
+
+    const created = await request(app)
+      .post('/transactions/recurring')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 30,
+        description: 'Assinatura',
+        startDate: new Date().toISOString(),
+        intervalMonths: 1,
+        tagNames: ['assinatura'],
+      });
+
+    const recurrenceId = created.body.recurrence.id;
+    const geradas = created.body.transactions.length;
+
+    await prisma.transaction.deleteMany({
+      where: { recurrenceId, date: { gt: new Date() } },
+    });
+
+    const list = await request(app)
+      .get('/transactions?pageSize=200')
+      .set('Authorization', `Bearer ${token}`);
+
+    const ocorrencias = list.body.items.filter(
+      (t: { recurrenceId: string | null }) => t.recurrenceId === recurrenceId,
+    );
+
+    expect(ocorrencias.length).toBe(geradas);
+    expect(
+      ocorrencias.every((t: { tags: unknown[] }) => t.tags.length === 1),
+    ).toBe(true);
+  });
+
+  it('não reabastece o lote de uma recorrência cancelada', async () => {
+    const { token } = await registerUser(app);
+    const category = await createCategory(app, token, { type: 'EXPENSE' });
+
+    const created = await request(app)
+      .post('/transactions/recurring')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        categoryId: category.id,
+        type: 'EXPENSE',
+        amount: 30,
+        startDate: new Date().toISOString(),
+        intervalMonths: 1,
+      });
+
+    const recurrenceId = created.body.recurrence.id;
+
+    await request(app)
+      .delete(`/transactions/recurring/${recurrenceId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const list = await request(app)
+      .get('/transactions?pageSize=200')
+      .set('Authorization', `Bearer ${token}`);
+
+    const ocorrencias = list.body.items.filter(
+      (t: { recurrenceId: string | null }) => t.recurrenceId === recurrenceId,
+    );
+
+    expect(ocorrencias.length).toBeLessThanOrEqual(1);
   });
 });
