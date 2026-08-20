@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { createDefaultCategories } from '../categories/category.service';
 import { ConflictError, UnauthorizedError } from '../../utils/AppError';
 import { signAccessToken } from '../../utils/jwt';
 import { comparePassword, hashPassword } from '../../utils/password';
@@ -22,12 +23,18 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
 
   const passwordHash = await hashPassword(input.password);
 
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      passwordHash,
-      name: input.name,
-    },
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        email: input.email,
+        passwordHash,
+        name: input.name,
+      },
+    });
+
+    await createDefaultCategories(created.id, tx);
+
+    return created;
   });
 
   const token = signAccessToken({ sub: user.id, email: user.email });

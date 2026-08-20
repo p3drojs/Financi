@@ -1,7 +1,18 @@
-import { TransactionType } from '@prisma/client';
+import { Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { ConflictError, NotFoundError } from '../../utils/AppError';
 import { CreateCategoryInput, UpdateCategoryInput } from './category.schema';
+import { DEFAULT_CATEGORIES } from './category.defaults';
+
+export async function createDefaultCategories(
+  userId: string,
+  client: Prisma.TransactionClient = prisma,
+) {
+  return client.category.createMany({
+    data: DEFAULT_CATEGORIES.map((category) => ({ userId, ...category })),
+    skipDuplicates: true,
+  });
+}
 
 export async function createCategory(userId: string, input: CreateCategoryInput) {
   const existing = await prisma.category.findUnique({

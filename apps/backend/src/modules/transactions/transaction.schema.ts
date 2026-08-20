@@ -52,9 +52,29 @@ export const transactionIdParamSchema = z.object({
   }),
 });
 
+export const updateRecurrenceSchema = z.object({
+  body: z.object({
+    categoryId: z.string().uuid().optional(),
+    amount: z.number().positive().optional(),
+    description: z.string().max(280).optional(),
+    intervalMonths: z.number().int().min(1).max(60).optional(),
+    endDate: z.coerce.date().nullable().optional(),
+    occurrences: z.number().int().min(1).max(600).nullable().optional(),
+  }),
+  params: z.object({
+    recurrenceId: z.string().uuid(),
+  }),
+});
+
 export const recurrenceIdParamSchema = z.object({
   params: z.object({
     recurrenceId: z.string().uuid(),
+  }),
+});
+
+export const installmentGroupParamSchema = z.object({
+  params: z.object({
+    groupId: z.string().uuid(),
   }),
 });
 
@@ -70,6 +90,15 @@ export const listTransactionsSchema = z.object({
   }),
 });
 
+export const listRecurrencesSchema = z.object({
+  query: z.object({
+    active: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => (value === undefined ? undefined : value === 'true')),
+  }),
+});
+
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>['body'];
 export type CreateRecurringTransactionInput = z.infer<
   typeof createRecurringTransactionSchema
@@ -78,4 +107,6 @@ export type CreateInstallmentTransactionInput = z.infer<
   typeof createInstallmentTransactionSchema
 >['body'];
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>['body'];
+export type UpdateRecurrenceInput = z.infer<typeof updateRecurrenceSchema>['body'];
 export type ListTransactionsQuery = z.infer<typeof listTransactionsSchema>['query'];
+export type ListRecurrencesQuery = z.infer<typeof listRecurrencesSchema>['query'];

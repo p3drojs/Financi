@@ -1,6 +1,7 @@
 import {
   addMonths,
   generateRecurrenceDates,
+  pendingRecurrenceDates,
 } from '../../../../src/modules/transactions/recurrence.util';
 
 describe('addMonths', () => {
@@ -83,5 +84,62 @@ describe('generateRecurrenceDates', () => {
     expect(() => generateRecurrenceDates({ startDate: now, intervalMonths: 0, now })).toThrow(
       'intervalMonths deve ser >= 1',
     );
+  });
+});
+
+describe('pendingRecurrenceDates', () => {
+  const now = new Date(2027, 0, 1);
+
+  it('gera só o que falta depois da última ocorrência já criada', () => {
+    const dates = pendingRecurrenceDates({
+      startDate: new Date(2026, 0, 10),
+      intervalMonths: 1,
+      now,
+      windowMonthsAhead: 3,
+      generatedThrough: new Date(2026, 11, 10),
+    });
+
+    expect(dates).toEqual([
+      new Date(2027, 0, 10),
+      new Date(2027, 1, 10),
+      new Date(2027, 2, 10),
+    ]);
+  });
+
+  it('não gera nada quando o lote já cobre a janela inteira', () => {
+    const dates = pendingRecurrenceDates({
+      startDate: new Date(2026, 0, 10),
+      intervalMonths: 1,
+      now,
+      windowMonthsAhead: 3,
+      generatedThrough: new Date(2027, 3, 10),
+    });
+
+    expect(dates).toEqual([]);
+  });
+
+  it('respeita o limite de ocorrências ao estender', () => {
+    const dates = pendingRecurrenceDates({
+      startDate: new Date(2026, 0, 10),
+      intervalMonths: 1,
+      occurrences: 14,
+      now,
+      windowMonthsAhead: 12,
+      generatedThrough: new Date(2026, 11, 10),
+    });
+
+    expect(dates).toEqual([new Date(2027, 0, 10), new Date(2027, 1, 10)]);
+  });
+
+  it('sem ocorrência anterior, não recria histórico passado', () => {
+    const dates = pendingRecurrenceDates({
+      startDate: new Date(2026, 0, 10),
+      intervalMonths: 6,
+      now,
+      windowMonthsAhead: 12,
+      generatedThrough: null,
+    });
+
+    expect(dates.every((date) => date > now)).toBe(true);
   });
 });

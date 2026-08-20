@@ -49,3 +49,14 @@ export function generateRecurrenceDates(params: RecurrenceDatesParams): Date[] {
 
   return dates;
 }
+
+export interface PendingRecurrenceDatesParams extends RecurrenceDatesParams {
+  generatedThrough?: Date | null;
+}
+
+export function pendingRecurrenceDates(params: PendingRecurrenceDatesParams): Date[] {
+  const { generatedThrough, ...dateParams } = params;
+  const cutoff = generatedThrough ?? dateParams.now ?? new Date();
+
+  return generateRecurrenceDates(dateParams).filter((date) => date > cutoff);
+}

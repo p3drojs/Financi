@@ -47,6 +47,10 @@ paths:
       tags: [Auth]
       security: []
       summary: Cria um novo usuário
+      description: >
+        Junto com o usuário são criadas as categorias padrão (receita e despesa),
+        para a conta não começar vazia. Elas são categorias comuns e podem ser
+        renomeadas ou excluídas.
       requestBody:
         required: true
         content:
@@ -193,6 +197,9 @@ paths:
     get:
       tags: [Transactions]
       summary: Lista transações do usuário, com filtros e paginação
+      description: >
+        Antes de responder, estende o lote das recorrências ativas que ficaram
+        para trás da janela de 12 meses, criando as ocorrências que faltam.
       parameters:
         - name: dateFrom
           in: query
@@ -286,12 +293,34 @@ paths:
           description: Excluída com sucesso
 
   /transactions/recurring:
+    get:
+      tags: [Transactions]
+      summary: Lista as recorrências do usuário
+      description: >
+        Antes de responder, estende o lote das recorrências ativas que ficaram
+        para trás da janela de 12 meses.
+      parameters:
+        - name: active
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+          description: Filtra por recorrências ativas ou canceladas. Omitido, retorna todas.
+      responses:
+        '200':
+          description: Lista de recorrências
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecurrenceListItem'
     post:
       tags: [Transactions]
       summary: Cria uma transação recorrente (gera um lote de ocorrências pré-geradas)
       description: >
         Gera imediatamente as ocorrências futuras (Transaction) até o menor entre:
-        endDate, occurrences ou uma janela de 12 meses a partir de hoje.
+        endDate, occurrences ou uma janela de 12 meses a partir de hoje. O lote é
+        estendido depois, sob demanda, na leitura de /transactions e
+        /transactions/recurring.
       requestBody:
         required: true
         content:
@@ -314,14 +343,46 @@ paths:
                       $ref: '#/components/schemas/Transaction'
 
   /transactions/recurring/{recurrenceId}:
+    parameters:
+      - name: recurrenceId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Transactions]
+      summary: Edita o template de uma recorrência ativa (vale só para ocorrências futuras)
+      description: >
+        Alterações de valor, categoria ou descrição são aplicadas nas ocorrências
+        futuras existentes. Alterar intervalMonths, endDate ou occurrences
+        regera as ocorrências futuras a partir do novo cronograma. Ocorrências
+        passadas nunca são tocadas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecurrenceInput'
+      responses:
+        '200':
+          description: Recorrência atualizada com as ocorrências futuras resultantes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recurrence:
+                    $ref: '#/components/schemas/Recurrence'
+                  transactions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Transaction'
+        '404':
+          description: Recorrência não encontrada
+        '409':
+          description: Recorrência cancelada não pode ser editada
     delete:
       tags: [Transactions]
       summary: Cancela uma recorrência (remove só ocorrências futuras, preserva histórico)
-      parameters:
-        - name: recurrenceId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
       responses:
         '204':
           description: Recorrência cancelada
@@ -347,6 +408,28 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Transaction'
+
+  /transactions/installments/{groupId}:
+    get:
+      tags: [Transactions]
+      summary: Mostra um parcelamento agrupado (ex. "3 de 5 pagas")
+      description: >
+        Uma parcela é contada como paga quando a data dela já venceu — não há
+        marcação manual de pagamento no MVP.
+      parameters:
+        - name: groupId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Resumo do grupo de parcelas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallmentGroup'
+        '404':
+          description: Parcelamento não encontrado
 
   /dashboard/summary:
     get:
@@ -551,3 +634,51 @@ components:
         endDate: { type: string, format: date-time, nullable: true }
         occurrences: { type: integer, nullable: true }
         active: { type: boolean }
+
+    RecurrenceListItem:
+      allOf:
+        - $ref: '#/components/schemas/Recurrence'
+        - type: object
+          properties:
+            category:
+              $ref: '#/components/schemas/Category'
+            generatedCount:
+              type: integer
+              description: Total de ocorrências já geradas
+            lastOccurrenceDate: { type: string, format: date-time, nullable: true }
+            upcomingCount:
+              type: integer
+              description: Ocorrências futuras ainda não vencidas
+            nextOccurrenceDate: { type: string, format: date-time, nullable: true }
+
+    UpdateRecurrenceInput:
+      type: object
+      properties:
+        categoryId: { type: string, format: uuid }
+        amount: { type: number }
+        description: { type: string }
+        intervalMonths: { type: integer, minimum: 1, maximum: 60 }
+        endDate: { type: string, format: date-time, nullable: true }
+        occurrences: { type: integer, minimum: 1, maximum: 600, nullable: true }
+
+    InstallmentGroup:
+      type: object
+      properties:
+        installmentGroupId: { type: string, format: uuid }
+        categoryId: { type: string, format: uuid }
+        category:
+          $ref: '#/components/schemas/Category'
+        type:
+          $ref: '#/components/schemas/TransactionType'
+        description: { type: string, nullable: true }
+        installmentTotal: { type: integer }
+        installmentsGenerated: { type: integer }
+        paidCount: { type: integer }
+        remainingCount: { type: integer }
+        totalAmount: { type: string }
+        paidAmount: { type: string }
+        remainingAmount: { type: string }
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'

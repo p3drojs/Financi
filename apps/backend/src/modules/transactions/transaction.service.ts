@@ -1,15 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma, Recurrence } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { findOrCreateTags } from '../tags/tag.service';
-import { AppError, NotFoundError } from '../../utils/AppError';
-import { generateInstallmentDates, splitInstallments } from './installment.util';
-import { generateRecurrenceDates } from './recurrence.util';
+import { AppError, ConflictError, NotFoundError } from '../../utils/AppError';
+import {
+  generateInstallmentDates,
+  splitInstallments,
+  summarizeInstallments,
+} from './installment.util';
+import { generateRecurrenceDates, pendingRecurrenceDates } from './recurrence.util';
 import {
   CreateInstallmentTransactionInput,
   CreateRecurringTransactionInput,
   CreateTransactionInput,
+  ListRecurrencesQuery,
   ListTransactionsQuery,
+  UpdateRecurrenceInput,
   UpdateTransactionInput,
 } from './transaction.schema';
 
@@ -30,6 +36,58 @@ async function assertCategoryMatches(userId: string, categoryId: string, type: s
   }
 
   return category;
+}
+
+async function extendRecurrenceBatch(recurrence: Recurrence, now: Date): Promise<number> {
+  const lastOccurrence = await prisma.transaction.findFirst({
+    where: { recurrenceId: recurrence.id },
+    orderBy: { date: 'desc' },
+    include: { tags: true },
+  });
+
+  const dates = pendingRecurrenceDates({
+    startDate: recurrence.startDate,
+    intervalMonths: recurrence.intervalMonths,
+    endDate: recurrence.endDate,
+    occurrences: recurrence.occurrences,
+    now,
+    generatedThrough: lastOccurrence?.date,
+  });
+
+  if (dates.length === 0) {
+    return 0;
+  }
+
+  const tagIds = lastOccurrence?.tags.map((tag) => tag.tagId) ?? [];
+
+  await prisma.$transaction(
+    dates.map((date) =>
+      prisma.transaction.create({
+        data: {
+          userId: recurrence.userId,
+          categoryId: recurrence.categoryId,
+          type: recurrence.type,
+          amount: recurrence.amount,
+          description: recurrence.description,
+          date,
+          recurrenceId: recurrence.id,
+          tags: { create: tagIds.map((tagId) => ({ tagId })) },
+        },
+      }),
+    ),
+  );
+
+  return dates.length;
+}
+
+export async function extendActiveRecurrences(userId: string, now = new Date()): Promise<number> {
+  const recurrences = await prisma.recurrence.findMany({ where: { userId, active: true } });
+
+  const generated = await Promise.all(
+    recurrences.map((recurrence) => extendRecurrenceBatch(recurrence, now)),
+  );
+
+  return generated.reduce((total, count) => total + count, 0);
 }
 
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
@@ -136,6 +194,8 @@ export async function createInstallmentTransaction(
 }
 
 export async function listTransactions(userId: string, query: ListTransactionsQuery) {
+  await extendActiveRecurrences(userId);
+
   const where = {
     userId,
     ...(query.categoryId ? { categoryId: query.categoryId } : {}),
@@ -163,6 +223,31 @@ export async function listTransactions(userId: string, query: ListTransactionsQu
   ]);
 
   return { items, total, page: query.page, pageSize: query.pageSize };
+}
+
+export async function getInstallmentGroup(userId: string, groupId: string) {
+  const transactions = await prisma.transaction.findMany({
+    where: { userId, installmentGroupId: groupId },
+    include: transactionInclude,
+    orderBy: { installmentNumber: 'asc' },
+  });
+
+  const first = transactions[0];
+
+  if (!first) {
+    throw new NotFoundError('Parcelamento não encontrado');
+  }
+
+  return {
+    installmentGroupId: groupId,
+    categoryId: first.categoryId,
+    category: first.category,
+    type: first.type,
+    description: first.description,
+    installmentTotal: first.installmentTotal ?? transactions.length,
+    ...summarizeInstallments(transactions),
+    transactions,
+  };
 }
 
 export async function getTransactionById(userId: string, id: string) {
@@ -210,14 +295,156 @@ export async function deleteTransaction(userId: string, id: string) {
   await prisma.transaction.delete({ where: { id } });
 }
 
-export async function cancelRecurrence(userId: string, recurrenceId: string) {
-  const recurrence = await prisma.recurrence.findFirst({
-    where: { id: recurrenceId, userId },
+export async function listRecurrences(userId: string, query: ListRecurrencesQuery) {
+  await extendActiveRecurrences(userId);
+
+  const recurrences = await prisma.recurrence.findMany({
+    where: { userId, ...(query.active === undefined ? {} : { active: query.active }) },
+    include: { category: true },
+    orderBy: { createdAt: 'desc' },
   });
+
+  if (recurrences.length === 0) {
+    return [];
+  }
+
+  const recurrenceIds = recurrences.map((recurrence) => recurrence.id);
+  const now = new Date();
+
+  const [generated, upcoming] = await Promise.all([
+    prisma.transaction.groupBy({
+      by: ['recurrenceId'],
+      where: { userId, recurrenceId: { in: recurrenceIds } },
+      _count: { _all: true },
+      _max: { date: true },
+    }),
+    prisma.transaction.groupBy({
+      by: ['recurrenceId'],
+      where: { userId, recurrenceId: { in: recurrenceIds }, date: { gt: now } },
+      _count: { _all: true },
+      _min: { date: true },
+    }),
+  ]);
+
+  const generatedByRecurrence = new Map(generated.map((group) => [group.recurrenceId, group]));
+  const upcomingByRecurrence = new Map(upcoming.map((group) => [group.recurrenceId, group]));
+
+  return recurrences.map((recurrence) => ({
+    ...recurrence,
+    generatedCount: generatedByRecurrence.get(recurrence.id)?._count._all ?? 0,
+    lastOccurrenceDate: generatedByRecurrence.get(recurrence.id)?._max.date ?? null,
+    upcomingCount: upcomingByRecurrence.get(recurrence.id)?._count._all ?? 0,
+    nextOccurrenceDate: upcomingByRecurrence.get(recurrence.id)?._min.date ?? null,
+  }));
+}
+
+async function findRecurrenceOrFail(userId: string, recurrenceId: string) {
+  const recurrence = await prisma.recurrence.findFirst({ where: { id: recurrenceId, userId } });
 
   if (!recurrence) {
     throw new NotFoundError('Recorrência não encontrada');
   }
+
+  return recurrence;
+}
+
+async function rescheduleFutureOccurrences(recurrence: Recurrence, now: Date) {
+  const reference = await prisma.transaction.findFirst({
+    where: { recurrenceId: recurrence.id },
+    orderBy: { date: 'asc' },
+    include: { tags: true },
+  });
+
+  const tagIds = reference?.tags.map((tag) => tag.tagId) ?? [];
+
+  const dates = generateRecurrenceDates({
+    startDate: recurrence.startDate,
+    intervalMonths: recurrence.intervalMonths,
+    endDate: recurrence.endDate,
+    occurrences: recurrence.occurrences,
+    now,
+  }).filter((date) => date > now);
+
+  await prisma.$transaction([
+    prisma.transaction.deleteMany({ where: { recurrenceId: recurrence.id, date: { gt: now } } }),
+    ...dates.map((date) =>
+      prisma.transaction.create({
+        data: {
+          userId: recurrence.userId,
+          categoryId: recurrence.categoryId,
+          type: recurrence.type,
+          amount: recurrence.amount,
+          description: recurrence.description,
+          date,
+          recurrenceId: recurrence.id,
+          tags: { create: tagIds.map((tagId) => ({ tagId })) },
+        },
+      }),
+    ),
+  ]);
+}
+
+export async function updateRecurrence(
+  userId: string,
+  recurrenceId: string,
+  input: UpdateRecurrenceInput,
+) {
+  const recurrence = await findRecurrenceOrFail(userId, recurrenceId);
+
+  if (!recurrence.active) {
+    throw new ConflictError('Recorrência cancelada não pode ser editada');
+  }
+
+  if (input.categoryId) {
+    await assertCategoryMatches(userId, input.categoryId, recurrence.type);
+  }
+
+  const updated = await prisma.recurrence.update({
+    where: { id: recurrenceId },
+    data: {
+      categoryId: input.categoryId,
+      amount: input.amount,
+      description: input.description,
+      intervalMonths: input.intervalMonths,
+      endDate: input.endDate,
+      occurrences: input.occurrences,
+    },
+  });
+
+  const now = new Date();
+  const scheduleChanged =
+    input.intervalMonths !== undefined ||
+    input.endDate !== undefined ||
+    input.occurrences !== undefined;
+  const valuesChanged =
+    input.categoryId !== undefined ||
+    input.amount !== undefined ||
+    input.description !== undefined;
+
+  if (scheduleChanged) {
+    await rescheduleFutureOccurrences(updated, now);
+  } else if (valuesChanged) {
+    await prisma.transaction.updateMany({
+      where: { recurrenceId, date: { gt: now } },
+      data: {
+        categoryId: input.categoryId,
+        amount: input.amount,
+        description: input.description,
+      },
+    });
+  }
+
+  const transactions = await prisma.transaction.findMany({
+    where: { recurrenceId, date: { gt: now } },
+    include: transactionInclude,
+    orderBy: { date: 'asc' },
+  });
+
+  return { recurrence: updated, transactions };
+}
+
+export async function cancelRecurrence(userId: string, recurrenceId: string) {
+  await findRecurrenceOrFail(userId, recurrenceId);
 
   await prisma.$transaction([
     prisma.transaction.deleteMany({
