@@ -1,10 +1,12 @@
 import {
+  AuthUser,
   BalancePoint,
   Category,
   CategoryTotal,
   DashboardSummary,
   InstallmentGroup,
   RecurrenceListItem,
+  Tag,
   Transaction,
   TransactionPage,
   TransactionType,
@@ -332,3 +334,19 @@ export const installmentDraft = {
 export function recurrenceById(id: string): RecurrenceListItem | undefined {
   return recurrences.find((item) => item.id === id);
 }
+
+export const authUser: AuthUser = {
+  id: USER_ID,
+  email: 'pedro@financi.app',
+  name: 'Pedro',
+};
+
+export const tags: Tag[] = [
+  { id: 'tag-bike', userId: USER_ID, name: 'bike', createdAt: STAMP },
+  { id: 'tag-casa', userId: USER_ID, name: 'casa', createdAt: STAMP },
+  { id: 'tag-cliente', userId: USER_ID, name: 'cliente', createdAt: STAMP },
+  { id: 'tag-trabalho', userId: USER_ID, name: 'trabalho', createdAt: STAMP },
+  { id: 'tag-viagem', userId: USER_ID, name: 'viagem', createdAt: STAMP },
+];
+
+export const tagsInUse = new Set(['tag-casa', 'tag-cliente', 'tag-trabalho', 'tag-bike']);
