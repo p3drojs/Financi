@@ -52,6 +52,8 @@ export default function RootLayout() {
         <Stack.Screen name="entrar" />
         <Stack.Screen name="transacao/[id]" />
         <Stack.Screen name="parcelamento/[groupId]" />
+        <Stack.Screen name="categorias" />
+        <Stack.Screen name="categoria/[id]" />
         <Stack.Screen name="recorrencia/[id]" />
         <Stack.Screen name="nova/index" />
         <Stack.Screen name="nova/parcelada" />
