@@ -49,6 +49,7 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="entrar" />
         <Stack.Screen name="transacao/[id]" />
         <Stack.Screen name="parcelamento/[groupId]" />
         <Stack.Screen name="nova/parcelada" />
