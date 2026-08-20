@@ -33,7 +33,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         })}
       </View>
 
-      <Pressable style={styles.fab} onPress={() => router.push('/nova/parcelada')}>
+      <Pressable style={styles.fab} onPress={() => router.push('/nova')}>
         <PlusIcon />
       </Pressable>
     </View>
@@ -50,12 +50,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.gutter,
     backgroundColor: colors.paper,
   },
-  tabs: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  tab: { minHeight: space.touch, justifyContent: 'center' },
+  tabs: { flexDirection: 'row', alignItems: 'center', gap: 14, flexShrink: 1 },
+  tab: { minHeight: space.touch, justifyContent: 'center', flexShrink: 1 },
   label: { fontFamily: fonts.sans, fontSize: 14, color: colors.inkFaint },
   labelActive: { color: colors.ink },
   fab: {
     width: 46,
+    flexShrink: 0,
     height: 46,
     borderRadius: 23,
     borderWidth: 1,
