@@ -1,9 +1,11 @@
-import { Link, useLocalSearchParams, useRouter } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Actions } from '@/components/Actions';
+import { BackHeader } from '@/components/BackHeader';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
 import { Stroke } from '@/components/Stroke';
-import { ChevronDown, ChevronLeft, RepeatIcon } from '@/components/icons';
+import { ChevronDown, RepeatIcon } from '@/components/icons';
 import { dayOfMonth, fullDate, money, repeatLabel } from '@/lib/format';
 import { recurrenceById, transactionById } from '@/mock/data';
 import { onPaper } from '@/theme/categoryColors';
@@ -11,7 +13,6 @@ import { colors, fonts, space, tabular, type } from '@/theme/tokens';
 
 export default function TransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   const item = transactionById(id);
   const color = onPaper(item.category.color);
   const recurrence = item.recurrenceId ? recurrenceById(item.recurrenceId) : undefined;
@@ -19,12 +20,7 @@ export default function TransactionScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.back}>
-          <ChevronLeft />
-        </Pressable>
-        <Text style={type.title}>{day}</Text>
-      </View>
+      <BackHeader title={day} />
 
       {recurrence ? (
         <ScopeNote
@@ -84,14 +80,7 @@ export default function TransactionScreen() {
 
       <View style={styles.spacer} />
 
-      <View style={styles.footer}>
-        <Pressable style={styles.save}>
-          <Text style={styles.saveLabel}>guardar</Text>
-        </Pressable>
-        <Pressable style={styles.delete}>
-          <Text style={styles.deleteLabel}>apagar este</Text>
-        </Pressable>
-      </View>
+      <Actions primaryLabel="guardar" secondaryLabel="apagar este" secondaryTone="danger" />
     </Screen>
   );
 }
@@ -122,13 +111,6 @@ function ScopeNote({ text, linkLabel, href }: ScopeNoteProps) {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 34 },
-  header: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: -14 },
-  back: {
-    width: space.touch,
-    height: space.touch,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   note: { marginTop: 22, flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
   noteIcon: { marginTop: 3 },
   noteBody: { flexGrow: 1, flexShrink: 1, gap: 8 },
@@ -157,21 +139,4 @@ const styles = StyleSheet.create({
   tags: { flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
   tagPlaceholder: { fontFamily: fonts.sans, fontSize: 17, color: colors.inkGhost },
   spacer: { flexGrow: 1, minHeight: 40 },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  save: {
-    flexGrow: 1,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.inkFaint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveLabel: { fontFamily: fonts.sans, fontSize: 15, color: colors.ink },
-  delete: { height: 52, paddingHorizontal: 8, justifyContent: 'center' },
-  deleteLabel: { fontFamily: fonts.sans, fontSize: 15, color: colors.brick },
 });

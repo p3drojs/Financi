@@ -1,18 +1,16 @@
-import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Transaction } from '@/api/types';
+import { BackHeader } from '@/components/BackHeader';
 import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
 import { Stroke } from '@/components/Stroke';
 import { WavyRule } from '@/components/WavyRule';
-import { ChevronLeft } from '@/components/icons';
 import { fullDate, money, ordinal } from '@/lib/format';
 import { installmentGroup } from '@/mock/data';
 import { onPaper } from '@/theme/categoryColors';
-import { colors, fonts, space, tabular, type } from '@/theme/tokens';
+import { colors, fonts, tabular, type } from '@/theme/tokens';
 
 export default function InstallmentGroupScreen() {
-  const router = useRouter();
   const group = installmentGroup;
   const color = onPaper(group.category.color);
   const tags = group.transactions[0]?.tags ?? [];
@@ -21,14 +19,7 @@ export default function InstallmentGroupScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.back}>
-          <ChevronLeft />
-        </Pressable>
-        <Text style={[type.titleSmall, styles.title]} numberOfLines={1}>
-          {group.description}
-        </Text>
-      </View>
+      <BackHeader title={group.description ?? 'parcelamento'} compact />
 
       <View style={styles.meta}>
         <Stroke color={color} width={20} />
@@ -125,14 +116,6 @@ function InstallmentRow({ item, paid, next, carriesRemainder }: RowProps) {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 34 },
-  header: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: -14 },
-  back: {
-    width: space.touch,
-    height: space.touch,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: { flexShrink: 1 },
   meta: { marginTop: 20, flexDirection: 'row', alignItems: 'center', gap: 10 },
   category: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkFaint },
   tag: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkGhost },

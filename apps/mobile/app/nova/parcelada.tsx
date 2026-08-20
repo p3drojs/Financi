@@ -1,11 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Actions } from '@/components/Actions';
+import { BackHeader } from '@/components/BackHeader';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
 import { Stroke } from '@/components/Stroke';
 import { WavyRule } from '@/components/WavyRule';
-import { ChevronDown, ChevronLeft, StepMinus, StepPlus } from '@/components/icons';
+import { ChevronDown, StepMinus, StepPlus } from '@/components/icons';
 import { fullDate, money } from '@/lib/format';
 import { addMonths, splitInstallments } from '@/lib/installments';
 import { categoryById, installmentDraft } from '@/mock/data';
@@ -26,12 +28,7 @@ export default function NewInstallmentScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.back}>
-          <ChevronLeft />
-        </Pressable>
-        <Text style={type.title}>parcelar uma compra</Text>
-      </View>
+      <BackHeader title="parcelar uma compra" />
 
       <View style={styles.fields}>
         <Field label="o que foi">
@@ -138,14 +135,11 @@ export default function NewInstallmentScreen() {
 
       <View style={styles.spacer} />
 
-      <View style={styles.footer}>
-        <Pressable style={styles.submit}>
-          <Text style={styles.submitLabel}>lançar as {count}</Text>
-        </Pressable>
-        <Pressable style={styles.discard} onPress={() => router.back()}>
-          <Text style={styles.discardLabel}>descartar</Text>
-        </Pressable>
-      </View>
+      <Actions
+        primaryLabel={`lançar as ${count}`}
+        secondaryLabel="descartar"
+        onSecondary={() => router.back()}
+      />
     </Screen>
   );
 }
@@ -158,13 +152,6 @@ function remainderNote(cents: number): string {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 34 },
-  header: { height: 30, flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: -14 },
-  back: {
-    width: space.touch,
-    height: space.touch,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   fields: { marginTop: 28, gap: 24 },
   amountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 7 },
   currency: { fontFamily: fonts.serif, fontSize: 16, color: colors.inkFaint },
@@ -213,17 +200,4 @@ const styles = StyleSheet.create({
   previewValueStrong: { color: colors.ink },
   previewNote: { fontFamily: fonts.sans, fontSize: 12, color: colors.inkFaint, marginTop: 2 },
   spacer: { flexGrow: 1, minHeight: 30 },
-  footer: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  submit: {
-    flexGrow: 1,
-    height: 52,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: colors.inkFaint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  submitLabel: { fontFamily: fonts.sans, fontSize: 15, color: colors.ink },
-  discard: { height: 52, paddingHorizontal: 8, justifyContent: 'center' },
-  discardLabel: { fontFamily: fonts.sans, fontSize: 15, color: colors.inkFaint },
 });
