@@ -117,7 +117,7 @@ describe('Categories (e2e)', () => {
       .get('/categories?type=INCOME')
       .set('Authorization', `Bearer ${token}`);
 
-    expect(res.body.length).toBe(
+    expect(res.body).toHaveLength(
       DEFAULT_CATEGORIES.filter((category) => category.type === 'INCOME').length,
     );
     expect(res.body.every((category: { type: string }) => category.type === 'INCOME')).toBe(true);

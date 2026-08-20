@@ -261,7 +261,7 @@ describe('Transactions (e2e)', () => {
       (t: { recurrenceId: string | null }) => t.recurrenceId === recurrenceId,
     );
 
-    expect(ocorrencias.length).toBe(geradas);
+    expect(ocorrencias).toHaveLength(geradas);
     expect(
       ocorrencias.every((t: { tags: unknown[] }) => t.tags.length === 1),
     ).toBe(true);
