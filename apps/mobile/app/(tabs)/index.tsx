@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CategoryTotal } from '@/api/types';
 import { Money } from '@/components/Money';
@@ -16,7 +17,8 @@ const BAR_AREA = 48;
 const BAR_BELOW = 12;
 
 export default function MonthScreen() {
-  const visible = byCategory.slice(0, VISIBLE_CATEGORIES);
+  const [showAllCategories, setShowAllCategories] = useState(false);
+  const visible = showAllCategories ? byCategory : byCategory.slice(0, VISIBLE_CATEGORIES);
   const hidden = byCategory.length - visible.length;
   const largest = Math.max(...byCategory.map((item) => Number(item.total)));
   const peak = Math.max(...balanceEvolution.map((point) => Math.abs(Number(point.balance))));
@@ -67,10 +69,14 @@ export default function MonthScreen() {
         ))}
       </View>
 
-      {hidden > 0 ? (
-        <Text style={styles.more}>
-          mais {hidden} {hidden === 1 ? 'categoria' : 'categorias'}
-        </Text>
+      {hidden > 0 || showAllCategories ? (
+        <Pressable onPress={() => setShowAllCategories(!showAllCategories)}>
+          <Text style={styles.more}>
+            {showAllCategories
+              ? 'mostrar só as maiores'
+              : `mais ${hidden} ${hidden === 1 ? 'categoria' : 'categorias'}`}
+          </Text>
+        </Pressable>
       ) : null}
 
       <View style={styles.evolution}>
