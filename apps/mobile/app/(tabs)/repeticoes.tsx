@@ -1,3 +1,4 @@
+import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { RecurrenceListItem } from '@/api/types';
@@ -78,9 +79,11 @@ function RecurrenceRow({ item, open, onToggle }: RowProps) {
             parar apaga só o que ainda não chegou. as {past} que já passaram continuam no histórico.
           </Text>
           <View style={styles.buttons}>
-            <Pressable style={styles.button}>
-              <Text style={styles.buttonLabel}>mudar</Text>
-            </Pressable>
+            <Link href={`/recorrencia/${item.id}`} asChild>
+              <Pressable style={styles.button}>
+                <Text style={styles.buttonLabel}>mudar</Text>
+              </Pressable>
+            </Link>
             <Pressable style={[styles.button, styles.buttonDanger]}>
               <Text style={[styles.buttonLabel, styles.buttonLabelDanger]}>parar de repetir</Text>
             </Pressable>
