@@ -21,6 +21,13 @@ export class NetworkError extends Error {
   }
 }
 
+export class SyncingError extends Error {
+  constructor() {
+    super('ainda sincronizando os dados — espera terminar pra editar');
+    this.name = 'SyncingError';
+  }
+}
+
 type QueryValue = string | number | boolean | undefined | null;
 
 interface RequestOptions {
