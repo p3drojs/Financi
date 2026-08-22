@@ -1,18 +1,11 @@
 import { TransactionType } from '@prisma/client';
 import { prisma } from '../src/config/prisma';
-import { createDefaultCategories } from '../src/modules/categories/category.service';
 import {
   createInstallmentTransaction,
   createRecurringTransaction,
   createTransaction,
 } from '../src/modules/transactions/transaction.service';
-import { hashPassword } from '../src/utils/password';
-
-const SEED_USER = {
-  email: 'pedro@financi.app',
-  name: 'Pedro',
-  password: '123456789',
-};
+import { SEED_USER, resetSeedUser, runSeed } from './seed.shared';
 
 const today = new Date();
 const baseYear = today.getUTCFullYear();
@@ -276,27 +269,6 @@ const SINGLES: SingleSeed[] = [
   },
 ];
 
-async function resetSeedUser() {
-  const existing = await prisma.user.findUnique({ where: { email: SEED_USER.email } });
-  const passwordHash = await hashPassword(SEED_USER.password);
-
-  if (!existing) {
-    return prisma.user.create({
-      data: { email: SEED_USER.email, name: SEED_USER.name, passwordHash },
-    });
-  }
-
-  await prisma.transaction.deleteMany({ where: { userId: existing.id } });
-  await prisma.recurrence.deleteMany({ where: { userId: existing.id } });
-  await prisma.tag.deleteMany({ where: { userId: existing.id } });
-  await prisma.category.deleteMany({ where: { userId: existing.id } });
-
-  return prisma.user.update({
-    where: { id: existing.id },
-    data: { name: SEED_USER.name, passwordHash },
-  });
-}
-
 async function loadCategories(userId: string) {
   const categories = await prisma.category.findMany({ where: { userId } });
   return new Map(categories.map((category) => [`${category.type}:${category.name}`, category.id]));
@@ -312,10 +284,8 @@ function resolveCategoryId(categories: Map<string, string>, type: TransactionTyp
   return id;
 }
 
-async function main() {
+runSeed(async () => {
   const user = await resetSeedUser();
-  await createDefaultCategories(user.id);
-
   const categories = await loadCategories(user.id);
 
   for (const item of RECURRING) {
@@ -361,13 +331,4 @@ async function main() {
 
   console.log(`Seed concluida para ${SEED_USER.email} (senha: ${SEED_USER.password})`);
   console.log(`${transactions} transacoes, ${recurrences} recorrencias, ${tags} tags`);
-}
-
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+});
