@@ -43,11 +43,8 @@ jobs:
       - name: Aplicar migrations no banco de teste
         run: npm run prisma:migrate:deploy
 
-      - name: Testes unitários
-        run: npm run test:unit -- --coverage
-
-      - name: Testes e2e
-        run: npm run test:e2e
+      - name: Testes com cobertura
+        run: npm run test:coverage -- --runInBand
 
       - name: Build
         run: npm run build
