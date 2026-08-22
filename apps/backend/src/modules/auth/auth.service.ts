@@ -32,10 +32,8 @@ async function issueRefreshToken(userId: string): Promise<string> {
 }
 
 async function buildAuthResult(user: AuthUser): Promise<AuthResult> {
-  const [token, refreshToken] = await Promise.all([
-    signAccessToken({ sub: user.id, email: user.email }),
-    issueRefreshToken(user.id),
-  ]);
+  const token = signAccessToken({ sub: user.id, email: user.email });
+  const refreshToken = await issueRefreshToken(user.id);
 
   return { user, token, refreshToken };
 }
