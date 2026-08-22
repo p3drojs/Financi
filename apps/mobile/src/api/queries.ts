@@ -1,4 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSyncStatus } from '@/sync/SyncStatus';
 import * as api from './endpoints';
 import {
   CreateCategoryInput,
@@ -103,9 +104,13 @@ export function useBalanceEvolution(months: number) {
 
 function useLedgerMutation<TInput, TResult>(mutationFn: (input: TInput) => Promise<TResult>) {
   const client = useQueryClient();
+  const { assertCanEdit } = useSyncStatus();
 
   return useMutation({
-    mutationFn,
+    mutationFn: (input: TInput) => {
+      assertCanEdit();
+      return mutationFn(input);
+    },
     onSuccess: () => invalidateLedger(client),
   });
 }
@@ -146,9 +151,13 @@ export function useCancelRecurrence() {
 
 function useCategoryMutation<TInput, TResult>(mutationFn: (input: TInput) => Promise<TResult>) {
   const client = useQueryClient();
+  const { assertCanEdit } = useSyncStatus();
 
   return useMutation({
-    mutationFn,
+    mutationFn: (input: TInput) => {
+      assertCanEdit();
+      return mutationFn(input);
+    },
     onSuccess: () =>
       Promise.all([
         client.invalidateQueries({ queryKey: keys.categories }),
@@ -171,9 +180,13 @@ export function useDeleteCategory() {
 
 export function useDeleteTag() {
   const client = useQueryClient();
+  const { assertCanEdit } = useSyncStatus();
 
   return useMutation({
-    mutationFn: (id: string) => api.tags.remove(id),
+    mutationFn: (id: string) => {
+      assertCanEdit();
+      return api.tags.remove(id);
+    },
     onSuccess: () => client.invalidateQueries({ queryKey: keys.tags }),
   });
 }
