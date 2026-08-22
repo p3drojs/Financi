@@ -2,14 +2,17 @@ import { Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { ConflictError, NotFoundError } from '../../utils/AppError';
 import { CreateCategoryInput, UpdateCategoryInput } from './category.schema';
-import { DEFAULT_CATEGORIES } from './category.defaults';
+import { DEFAULT_CATEGORIES, SYSTEM_CATEGORIES } from './category.defaults';
 
 export async function createDefaultCategories(
   userId: string,
   client: Prisma.TransactionClient = prisma,
 ) {
   return client.category.createMany({
-    data: DEFAULT_CATEGORIES.map((category) => ({ userId, ...category })),
+    data: [...DEFAULT_CATEGORIES, ...SYSTEM_CATEGORIES].map((category) => ({
+      userId,
+      ...category,
+    })),
     skipDuplicates: true,
   });
 }

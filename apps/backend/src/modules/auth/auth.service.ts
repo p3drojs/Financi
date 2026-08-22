@@ -1,5 +1,6 @@
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
+import { createDefaultAccount } from '../accounts/account.service';
 import { createDefaultCategories } from '../categories/category.service';
 import { NotFoundError, ConflictError, UnauthorizedError } from '../../utils/AppError';
 import { signAccessToken } from '../../utils/jwt';
@@ -58,6 +59,7 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
     });
 
     await createDefaultCategories(created.id, tx);
+    await createDefaultAccount(created.id, tx);
 
     return created;
   });

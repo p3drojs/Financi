@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma, Recurrence } from '@prisma/client';
 import { prisma } from '../../config/prisma';
+import { getDefaultAccountId } from '../accounts/account.service';
 import { findOrCreateTags } from '../tags/tag.service';
 import { AppError, ConflictError, NotFoundError } from '../../utils/AppError';
 import {
@@ -59,12 +60,14 @@ async function extendRecurrenceBatch(recurrence: Recurrence, now: Date): Promise
   }
 
   const tagIds = lastOccurrence?.tags.map((tag) => tag.tagId) ?? [];
+  const accountId = lastOccurrence?.accountId ?? (await getDefaultAccountId(recurrence.userId));
 
   await prisma.$transaction(
     dates.map((date) =>
       prisma.transaction.create({
         data: {
           userId: recurrence.userId,
+          accountId,
           categoryId: recurrence.categoryId,
           type: recurrence.type,
           amount: recurrence.amount,
@@ -92,11 +95,13 @@ export async function extendActiveRecurrences(userId: string, now = new Date()):
 
 export async function createTransaction(userId: string, input: CreateTransactionInput) {
   await assertCategoryMatches(userId, input.categoryId, input.type);
+  const accountId = await getDefaultAccountId(userId);
   const tags = await findOrCreateTags(userId, input.tagNames ?? []);
 
   return prisma.transaction.create({
     data: {
       userId,
+      accountId,
       categoryId: input.categoryId,
       type: input.type,
       amount: input.amount,
@@ -113,6 +118,7 @@ export async function createRecurringTransaction(
   input: CreateRecurringTransactionInput,
 ) {
   await assertCategoryMatches(userId, input.categoryId, input.type);
+  const accountId = await getDefaultAccountId(userId);
   const tags = await findOrCreateTags(userId, input.tagNames ?? []);
 
   const dates = generateRecurrenceDates({
@@ -142,6 +148,7 @@ export async function createRecurringTransaction(
         tx.transaction.create({
           data: {
             userId,
+            accountId,
             categoryId: input.categoryId,
             type: input.type,
             amount: input.amount,
@@ -164,6 +171,7 @@ export async function createInstallmentTransaction(
   input: CreateInstallmentTransactionInput,
 ) {
   await assertCategoryMatches(userId, input.categoryId, input.type);
+  const accountId = await getDefaultAccountId(userId);
   const tags = await findOrCreateTags(userId, input.tagNames ?? []);
 
   const dates = generateInstallmentDates(input.startDate, input.installmentTotal);
@@ -175,6 +183,7 @@ export async function createInstallmentTransaction(
       prisma.transaction.create({
         data: {
           userId,
+          accountId,
           categoryId: input.categoryId,
           type: input.type,
           amount: amounts[index] as Prisma.Decimal,
@@ -356,6 +365,7 @@ async function rescheduleFutureOccurrences(recurrence: Recurrence, now: Date) {
   });
 
   const tagIds = reference?.tags.map((tag) => tag.tagId) ?? [];
+  const accountId = reference?.accountId ?? (await getDefaultAccountId(recurrence.userId));
 
   const dates = generateRecurrenceDates({
     startDate: recurrence.startDate,
@@ -371,6 +381,7 @@ async function rescheduleFutureOccurrences(recurrence: Recurrence, now: Date) {
       prisma.transaction.create({
         data: {
           userId: recurrence.userId,
+          accountId,
           categoryId: recurrence.categoryId,
           type: recurrence.type,
           amount: recurrence.amount,
