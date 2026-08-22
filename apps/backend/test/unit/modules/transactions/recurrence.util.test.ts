@@ -99,11 +99,7 @@ describe('pendingRecurrenceDates', () => {
       generatedThrough: new Date(2026, 11, 10),
     });
 
-    expect(dates).toEqual([
-      new Date(2027, 0, 10),
-      new Date(2027, 1, 10),
-      new Date(2027, 2, 10),
-    ]);
+    expect(dates).toEqual([new Date(2027, 0, 10), new Date(2027, 1, 10), new Date(2027, 2, 10)]);
   });
 
   it('não gera nada quando o lote já cobre a janela inteira', () => {

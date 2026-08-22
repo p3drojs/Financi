@@ -262,9 +262,7 @@ describe('Transactions (e2e)', () => {
     );
 
     expect(ocorrencias).toHaveLength(geradas);
-    expect(
-      ocorrencias.every((t: { tags: unknown[] }) => t.tags.length === 1),
-    ).toBe(true);
+    expect(ocorrencias.every((t: { tags: unknown[] }) => t.tags.length === 1)).toBe(true);
   });
 
   it('não reabastece o lote de uma recorrência cancelada', async () => {
@@ -363,9 +361,9 @@ describe('Transactions (e2e)', () => {
     expect(res.status).toBe(200);
     expect(res.body.recurrence.intervalMonths).toBe(6);
     expect(res.body.transactions.length).toBeLessThan(created.body.transactions.length);
-    expect(res.body.transactions.every((t: { date: string }) => new Date(t.date) > new Date())).toBe(
-      true,
-    );
+    expect(
+      res.body.transactions.every((t: { date: string }) => new Date(t.date) > new Date()),
+    ).toBe(true);
   });
 
   it('rejeita edição de recorrência cancelada', async () => {
