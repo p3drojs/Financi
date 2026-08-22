@@ -51,11 +51,11 @@ export async function getCategoryById(userId: string, id: string) {
 }
 
 export async function updateCategory(userId: string, id: string, input: UpdateCategoryInput) {
-  await getCategoryById(userId, id);
+  const category = await getCategoryById(userId, id);
 
   if (input.name) {
     const existing = await prisma.category.findFirst({
-      where: { userId, name: input.name, id: { not: id } },
+      where: { userId, name: input.name, type: category.type, id: { not: id } },
     });
 
     if (existing) {

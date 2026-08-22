@@ -69,6 +69,33 @@ describe('Categories (e2e)', () => {
     expect(res.body.name).toBe('Renomeada');
   });
 
+  it('permite renomear para um nome que só existe no outro tipo', async () => {
+    const { token } = await registerUser(app);
+    await createCategory(app, token, { name: 'Freela', type: 'INCOME' });
+    const despesa = await createCategory(app, token, { name: 'Mercado', type: 'EXPENSE' });
+
+    const res = await request(app)
+      .patch(`/categories/${despesa.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Freela' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.name).toBe('Freela');
+  });
+
+  it('rejeita renomear para um nome já usado no mesmo tipo', async () => {
+    const { token } = await registerUser(app);
+    await createCategory(app, token, { name: 'Farmácia', type: 'EXPENSE' });
+    const outra = await createCategory(app, token, { name: 'Padaria', type: 'EXPENSE' });
+
+    const res = await request(app)
+      .patch(`/categories/${outra.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Farmácia' });
+
+    expect(res.status).toBe(409);
+  });
+
   it('bloqueia exclusão de categoria em uso por transação', async () => {
     const { token } = await registerUser(app);
     const category = await createCategory(app, token, { type: 'EXPENSE' });
