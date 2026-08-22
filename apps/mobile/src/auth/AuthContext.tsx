@@ -38,11 +38,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    const current = refreshToken.current;
     refreshToken.current = null;
     setAuthToken(null);
     setUser(null);
     await clearSession();
     queryClient.clear();
+
+    if (current) await api.auth.logout(current).catch(() => undefined);
   }, [queryClient]);
 
   useEffect(() => {
