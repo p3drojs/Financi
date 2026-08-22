@@ -1,9 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { onUnauthorized, setAuthToken } from '@/api/client';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { onUnauthorized, setAuthToken, setTokenRefresher } from '@/api/client';
 import * as api from '@/api/endpoints';
 import { AuthUser, LoginInput, RegisterInput } from '@/api/types';
-import { clearSession, loadSession, saveSession } from './session';
+import { clearSession, loadSession, saveSession, Session } from './session';
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -20,12 +29,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [restoring, setRestoring] = useState(true);
+  const refreshToken = useRef<string | null>(null);
+
+  const adoptSession = useCallback((session: Session) => {
+    refreshToken.current = session.refreshToken;
+    setAuthToken(session.token);
+    setUser(session.user);
+  }, []);
 
   const signOut = useCallback(async () => {
+    const current = refreshToken.current;
+    refreshToken.current = null;
     setAuthToken(null);
     setUser(null);
     await clearSession();
     queryClient.clear();
+
+    if (current) await api.auth.logout(current).catch(() => undefined);
   }, [queryClient]);
 
   useEffect(() => {
@@ -33,11 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     loadSession()
       .then((session) => {
-        if (!active) return;
-        if (session) {
-          setAuthToken(session.token);
-          setUser(session.user);
-        }
+        if (!active || !session) return;
+        adoptSession(session);
       })
       .finally(() => {
         if (active) setRestoring(false);
@@ -46,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [adoptSession]);
 
   useEffect(() => {
     onUnauthorized(() => {
@@ -56,14 +73,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => onUnauthorized(null);
   }, [signOut]);
 
+  useEffect(() => {
+    setTokenRefresher(async () => {
+      const current = refreshToken.current;
+      if (!current) return null;
+
+      const session = await saveSession(await api.auth.refresh(current));
+      adoptSession(session);
+
+      return session.token;
+    });
+
+    return () => setTokenRefresher(null);
+  }, [adoptSession]);
+
   const adopt = useCallback(
     async (result: Awaited<ReturnType<typeof api.auth.login>>) => {
-      const session = await saveSession(result);
-      setAuthToken(session.token);
-      setUser(session.user);
+      adoptSession(await saveSession(result));
       queryClient.clear();
     },
-    [queryClient],
+    [adoptSession, queryClient],
   );
 
   const value = useMemo<AuthContextValue>(

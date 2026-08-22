@@ -37,8 +37,14 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+export type TokenRefresher = () => Promise<string | null>;
+
+const PATHS_WITHOUT_RETRY = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
+
 let authToken: string | null = null;
 let unauthorizedHandler: (() => void) | null = null;
+let tokenRefresher: TokenRefresher | null = null;
+let refreshInFlight: Promise<string | null> | null = null;
 
 export function setAuthToken(token: string | null): void {
   authToken = token;
@@ -46,6 +52,20 @@ export function setAuthToken(token: string | null): void {
 
 export function onUnauthorized(handler: (() => void) | null): void {
   unauthorizedHandler = handler;
+}
+
+export function setTokenRefresher(refresher: TokenRefresher | null): void {
+  tokenRefresher = refresher;
+}
+
+function refreshAuthToken(): Promise<string | null> {
+  refreshInFlight ??= (tokenRefresher?.() ?? Promise.resolve(null))
+    .catch(() => null)
+    .finally(() => {
+      refreshInFlight = null;
+    });
+
+  return refreshInFlight;
 }
 
 function buildUrl(path: string, query?: Record<string, QueryValue>): string {
@@ -77,21 +97,30 @@ async function parseError(response: Response): Promise<ApiError> {
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, query, signal } = options;
+  const url = buildUrl(path, query);
 
-  let response: Response;
+  async function send(token: string | null): Promise<Response> {
+    try {
+      return await fetch(url, {
+        method,
+        signal,
+        headers: {
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch {
+      throw new NetworkError();
+    }
+  }
 
-  try {
-    response = await fetch(buildUrl(path, query), {
-      method,
-      signal,
-      headers: {
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-  } catch {
-    throw new NetworkError();
+  const sentWith = authToken;
+  let response = await send(sentWith);
+
+  if (response.status === 401 && !PATHS_WITHOUT_RETRY.includes(path)) {
+    const token = authToken === sentWith ? await refreshAuthToken() : authToken;
+    if (token) response = await send(token);
   }
 
   if (response.status === 401) {
