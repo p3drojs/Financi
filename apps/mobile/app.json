@@ -13,6 +13,7 @@
       "supportsTablet": false
     },
     "android": {
+      "package": "com.p3drojs.financi",
       "adaptiveIcon": {
         "backgroundColor": "#1B1815",
         "foregroundImage": "./assets/android-icon-foreground.png",
