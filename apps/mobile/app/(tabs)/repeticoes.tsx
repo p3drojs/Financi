@@ -115,7 +115,12 @@ function RecurrenceRow({ item, open, busy, onToggle, onCancel }: RowProps) {
           </Text>
         </View>
 
-        <Money style={[styles.amount, item.type === 'INCOME' ? styles.amountIncome : null]}>
+        <Money
+          style={[
+            styles.amount,
+            item.type === 'INCOME' ? styles.amountIncome : styles.amountExpense,
+          ]}
+        >
           {signedMoney(item.amount, item.type)}
         </Money>
       </View>
@@ -188,6 +193,7 @@ const styles = StyleSheet.create({
   scheduleOpen: { color: colors.inkFaint },
   amount: { fontSize: 15, color: colors.ink, marginTop: 1, ...tabular },
   amountIncome: { color: colors.sage },
+  amountExpense: { color: colors.brick },
   actions: { marginTop: 16, gap: 16, paddingLeft: 29 },
   note: { fontFamily: fonts.serifItalic, fontSize: 15, lineHeight: 23, color: colors.inkMuted },
   buttons: { flexDirection: 'row', gap: 12 },
