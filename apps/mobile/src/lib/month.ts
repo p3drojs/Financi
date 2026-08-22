@@ -27,3 +27,7 @@ export function isSameMonth(a: Date, b: Date): boolean {
 export function monthsBetween(from: Date, to: Date): number {
   return (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + (to.getUTCMonth() - from.getUTCMonth());
 }
+
+export function monthKey(anchor: Date): string {
+  return `${anchor.getUTCFullYear()}-${String(anchor.getUTCMonth() + 1).padStart(2, '0')}`;
+}
