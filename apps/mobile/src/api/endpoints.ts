@@ -29,6 +29,10 @@ export const auth = {
   login: (input: LoginInput) => request<AuthResult>('/auth/login', { method: 'POST', body: input }),
   register: (input: RegisterInput) =>
     request<AuthResult>('/auth/register', { method: 'POST', body: input }),
+  refresh: (refreshToken: string) =>
+    request<AuthResult>('/auth/refresh', { method: 'POST', body: { refreshToken } }),
+  logout: (refreshToken: string) =>
+    request<void>('/auth/logout', { method: 'POST', body: { refreshToken } }),
 };
 
 export const categories = {
