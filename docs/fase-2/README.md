@@ -133,3 +133,4 @@ depois.
 - [`agente-a-contas-pagamento.md`](agente-a-contas-pagamento.md) — onda 1
 - [`agente-b-previsao-orcamento-metas.md`](agente-b-previsao-orcamento-metas.md) — onda 1
 - [`02-consolidacao.md`](02-consolidacao.md) — onda 2
+- [`03-brief-telas.md`](03-brief-telas.md) — brief para o redesenho das telas, depois do backend
