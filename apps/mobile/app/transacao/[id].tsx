@@ -1,32 +1,107 @@
-import { Link, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  useCategories,
+  useDeleteTransaction,
+  useRecurrences,
+  useTransaction,
+  useUpdateTransaction,
+} from '@/api/queries';
+import { Transaction } from '@/api/types';
 import { Actions } from '@/components/Actions';
 import { BackHeader } from '@/components/BackHeader';
-import { Field } from '@/components/Field';
+import { CategoryField } from '@/components/CategoryField';
+import { DateField } from '@/components/DateField';
 import { Screen } from '@/components/Screen';
-import { Stroke } from '@/components/Stroke';
-import { ChevronDown, RepeatIcon } from '@/components/icons';
-import { dayOfMonth, fullDate, money, repeatLabel } from '@/lib/format';
-import { recurrenceById, transactionById } from '@/mock/data';
-import { onPaper } from '@/theme/categoryColors';
+import { ErrorState, InlineError, Loading } from '@/components/States';
+import { TagsField } from '@/components/TagsField';
+import { TextField } from '@/components/TextField';
+import { RepeatIcon } from '@/components/icons';
+import { dayOfMonth, repeatLabel } from '@/lib/format';
+import { amountToInput, parseAmount } from '@/lib/money';
 import { colors, fonts, space, tabular, type } from '@/theme/tokens';
 
 export default function TransactionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const item = transactionById(id);
-  const color = onPaper(item.category.color);
-  const recurrence = item.recurrenceId ? recurrenceById(item.recurrenceId) : undefined;
-  const day = dayOfMonth(item.date);
+  const query = useTransaction(id);
 
   return (
     <Screen scroll contentStyle={styles.content}>
+      {query.isPending ? (
+        <>
+          <BackHeader title="um lançamento" compact />
+          <Loading label="buscando o lançamento" />
+        </>
+      ) : query.error ? (
+        <>
+          <BackHeader title="um lançamento" compact />
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        </>
+      ) : query.data ? (
+        <TransactionForm key={query.data.id} item={query.data} />
+      ) : null}
+    </Screen>
+  );
+}
+
+function TransactionForm({ item }: { item: Transaction }) {
+  const router = useRouter();
+  const categories = useCategories(item.type);
+  const recurrences = useRecurrences();
+  const update = useUpdateTransaction(item.id);
+  const remove = useDeleteTransaction(item.id);
+
+  const [amount, setAmount] = useState(() => amountToInput(item.amount));
+  const [description, setDescription] = useState(item.description ?? '');
+  const [categoryId, setCategoryId] = useState(item.categoryId);
+  const [date, setDate] = useState(item.date);
+  const [tagNames, setTagNames] = useState(() => item.tags.map((link) => link.tag.name));
+
+  const day = dayOfMonth(item.date);
+  const parsed = parseAmount(amount);
+  const busy = update.isPending || remove.isPending;
+  const failure = update.error ?? remove.error;
+
+  const recurrence = item.recurrenceId
+    ? (recurrences.data ?? []).find((entry) => entry.id === item.recurrenceId)
+    : undefined;
+
+  const save = () => {
+    if (parsed === null) return;
+
+    update.mutate(
+      {
+        categoryId,
+        amount: parsed,
+        description: description.trim(),
+        date,
+        tagNames,
+      },
+      { onSuccess: () => router.back() },
+    );
+  };
+
+  const confirmDelete = () => {
+    Alert.alert('apagar este lançamento', `só o de ${day} some. o resto fica.`, [
+      { text: 'deixar como está', style: 'cancel' },
+      {
+        text: 'apagar',
+        style: 'destructive',
+        onPress: () => remove.mutate(undefined, { onSuccess: () => router.back() }),
+      },
+    ]);
+  };
+
+  return (
+    <>
       <BackHeader title={day} />
 
       {recurrence ? (
         <ScopeNote
           text={`isto ${repeatLabel(recurrence.intervalMonths)}. o que você mudar aqui vale só para ${day}.`}
           linkLabel="mudar a repetição inteira"
-          href="/repeticoes"
+          href={`/recorrencia/${recurrence.id}`}
         />
       ) : null}
 
@@ -39,49 +114,50 @@ export default function TransactionScreen() {
       ) : null}
 
       <View style={styles.fields}>
-        <Field label="o que foi">
-          <Text style={type.field}>{item.description}</Text>
-        </Field>
+        <TextField
+          label="o que foi"
+          value={description}
+          onChangeText={setDescription}
+          placeholder="sem descrição"
+        />
 
-        <Field label="quanto">
-          <View style={styles.amountRow}>
-            <Text style={styles.currency}>R$</Text>
-            <Text style={styles.amount}>{money(item.amount)}</Text>
-          </View>
-        </Field>
+        <TextField
+          label="quanto"
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="decimal-pad"
+          inputStyle={styles.amountInput}
+          hint={parsed === null ? 'um valor maior que zero' : undefined}
+        />
 
-        <Field label="em que categoria">
-          <View style={styles.categoryRow}>
-            <View style={styles.categoryName}>
-              <Stroke color={color} width={20} />
-              <Text style={type.field}>{item.category.name}</Text>
-            </View>
-            <ChevronDown size={9} />
-          </View>
-        </Field>
+        <CategoryField
+          categories={categories.data ?? []}
+          value={categoryId}
+          onChange={setCategoryId}
+          hint={item.type === 'INCOME' ? 'só categorias de entrada' : 'só categorias de saída'}
+        />
 
-        <Field label="quando">
-          <Text style={[type.field, tabular]}>{fullDate(item.date)}</Text>
-        </Field>
+        <DateField label="quando" value={date} onChange={setDate} />
 
-        <Field label="etiquetas">
-          <View style={styles.tags}>
-            {item.tags.map((link) => (
-              <Text key={link.tagId} style={type.field}>
-                {link.tag.name}
-              </Text>
-            ))}
-            <Text style={styles.tagPlaceholder}>
-              {item.tags.length > 0 ? 'escrever outra' : 'escrever uma'}
-            </Text>
-          </View>
-        </Field>
+        <TagsField value={tagNames} onChange={setTagNames} />
       </View>
 
       <View style={styles.spacer} />
 
-      <Actions primaryLabel="guardar" secondaryLabel="apagar este" secondaryTone="danger" />
-    </Screen>
+      <View style={styles.errorSlot}>
+        <InlineError error={failure} />
+      </View>
+
+      <Actions
+        primaryLabel="guardar"
+        onPrimary={save}
+        busy={busy}
+        disabled={parsed === null}
+        secondaryLabel="apagar este"
+        onSecondary={confirmDelete}
+        secondaryTone="danger"
+      />
+    </>
   );
 }
 
@@ -124,19 +200,7 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   fields: { marginTop: 34, gap: 28 },
-  amountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 7 },
-  currency: { fontFamily: fonts.serif, fontSize: 16, color: colors.inkFaint },
-  amount: {
-    fontFamily: fonts.serif,
-    fontSize: 34,
-    lineHeight: 38,
-    letterSpacing: -0.7,
-    color: colors.ink,
-    ...tabular,
-  },
-  categoryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  categoryName: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  tags: { flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
-  tagPlaceholder: { fontFamily: fonts.sans, fontSize: 17, color: colors.inkGhost },
+  amountInput: { fontFamily: fonts.serif, fontSize: 34, ...tabular },
   spacer: { flexGrow: 1, minHeight: 40 },
+  errorSlot: { marginBottom: 12 },
 });
