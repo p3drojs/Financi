@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   totalLabel: { fontFamily: fonts.sans, fontSize: 15, color: colors.inkMuted },
   totalIncome: { fontSize: 15, color: colors.sage },
-  totalExpense: { fontSize: 15, color: colors.ink },
+  totalExpense: { fontSize: 15, color: colors.brick },
   divider: { marginTop: 24 },
   sectionLabel: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkFaint, marginTop: 22 },
   sectionLabelFlush: { marginTop: 0 },

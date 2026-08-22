@@ -21,7 +21,7 @@ export function money(value: string | number): string {
 }
 
 export function signedMoney(value: string | number, type: 'INCOME' | 'EXPENSE'): string {
-  return type === 'INCOME' ? `+${money(value)}` : money(value);
+  return type === 'INCOME' ? `+${money(value)}` : `-${money(value)}`;
 }
 
 export function dayMonth(iso: string): string {

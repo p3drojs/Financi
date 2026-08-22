@@ -229,7 +229,12 @@ function Row({ item, intervalMonths }: RowProps) {
           </View>
         </View>
 
-        <Money style={[styles.amount, item.type === 'INCOME' ? styles.amountIncome : null]}>
+        <Money
+          style={[
+            styles.amount,
+            item.type === 'INCOME' ? styles.amountIncome : styles.amountExpense,
+          ]}
+        >
           {signedMoney(item.amount, item.type)}
         </Money>
       </Pressable>
@@ -282,6 +287,7 @@ const styles = StyleSheet.create({
   metaGhost: { fontFamily: fonts.sans, fontSize: 12, color: colors.inkGhost },
   amount: { fontSize: 15, color: colors.ink, paddingTop: 1, ...tabular },
   amountIncome: { color: colors.sage },
+  amountExpense: { color: colors.brick },
   footer: { paddingHorizontal: space.gutter, paddingTop: 14, minHeight: space.touch },
   footerLabel: {
     fontFamily: fonts.sans,
