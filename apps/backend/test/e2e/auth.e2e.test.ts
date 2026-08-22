@@ -15,6 +15,7 @@ describe('Auth (e2e)', () => {
       expect(res.status).toBe(201);
       expect(res.body.user.email).toBe('teste@financi.dev');
       expect(res.body.token).toEqual(expect.any(String));
+      expect(res.body.refreshToken).toEqual(expect.any(String));
     });
 
     it('rejeita registro duplicado com o mesmo email', async () => {
@@ -78,6 +79,83 @@ describe('Auth (e2e)', () => {
       });
 
       expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /auth/me', () => {
+    it('retorna o usuário autenticado', async () => {
+      const register = await request(app).post('/auth/register').send({
+        email: 'me@financi.dev',
+        password: 'senha12345',
+        name: 'Usuário Me',
+      });
+
+      const res = await request(app)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${register.body.token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.email).toBe('me@financi.dev');
+      expect(res.body.name).toBe('Usuário Me');
+    });
+
+    it('rejeita sem token', async () => {
+      const res = await request(app).get('/auth/me');
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('POST /auth/refresh', () => {
+    it('gera um par novo de tokens e invalida o refresh usado', async () => {
+      const register = await request(app).post('/auth/register').send({
+        email: 'refresh@financi.dev',
+        password: 'senha12345',
+      });
+
+      const res = await request(app)
+        .post('/auth/refresh')
+        .send({ refreshToken: register.body.refreshToken });
+
+      expect(res.status).toBe(200);
+      expect(res.body.token).toEqual(expect.any(String));
+      expect(res.body.refreshToken).not.toBe(register.body.refreshToken);
+
+      const reused = await request(app)
+        .post('/auth/refresh')
+        .send({ refreshToken: register.body.refreshToken });
+
+      expect(reused.status).toBe(401);
+    });
+
+    it('rejeita refresh token inválido', async () => {
+      const res = await request(app).post('/auth/refresh').send({ refreshToken: 'invalido' });
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('POST /auth/logout', () => {
+    it('revoga o refresh token', async () => {
+      const register = await request(app).post('/auth/register').send({
+        email: 'logout@financi.dev',
+        password: 'senha12345',
+      });
+
+      const logout = await request(app)
+        .post('/auth/logout')
+        .send({ refreshToken: register.body.refreshToken });
+
+      expect(logout.status).toBe(204);
+
+      const refresh = await request(app)
+        .post('/auth/refresh')
+        .send({ refreshToken: register.body.refreshToken });
+
+      expect(refresh.status).toBe(401);
+    });
+
+    it('não quebra ao deslogar com token desconhecido', async () => {
+      const res = await request(app).post('/auth/logout').send({ refreshToken: 'desconhecido' });
+      expect(res.status).toBe(204);
     });
   });
 });
