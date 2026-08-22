@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
+import { ledgerWhere } from '../transactions/ledger';
 import { addMonths } from '../transactions/recurrence.util';
 import { extendActiveRecurrences } from '../transactions/transaction.service';
 import { BalanceEvolutionQuery, ByCategoryQuery, SummaryQuery } from './dashboard.schema';
@@ -19,7 +20,7 @@ export async function getSummary(userId: string, query: SummaryQuery) {
 
   const grouped = await prisma.transaction.groupBy({
     by: ['type'],
-    where: { userId, ...dateRangeWhere(query.dateFrom, query.dateTo) },
+    where: { userId, ...ledgerWhere, ...dateRangeWhere(query.dateFrom, query.dateTo) },
     _sum: { amount: true },
   });
 
@@ -42,6 +43,7 @@ export async function getByCategory(userId: string, query: ByCategoryQuery) {
     by: ['categoryId'],
     where: {
       userId,
+      ...ledgerWhere,
       ...(query.type ? { type: query.type } : {}),
       ...dateRangeWhere(query.dateFrom, query.dateTo),
     },
@@ -72,7 +74,7 @@ export async function getBalanceEvolution(userId: string, query: BalanceEvolutio
   const rangeStart = addMonths(new Date(now.getFullYear(), now.getMonth(), 1), -(query.months - 1));
 
   const transactions = await prisma.transaction.findMany({
-    where: { userId, date: { gte: rangeStart } },
+    where: { userId, ...ledgerWhere, date: { gte: rangeStart } },
     select: { date: true, type: true, amount: true },
   });
 

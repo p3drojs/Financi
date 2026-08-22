@@ -1,5 +1,7 @@
 import request from 'supertest';
 import { createApp } from '../../src/app';
+import { prisma } from '../../src/config/prisma';
+import { DEFAULT_ACCOUNT } from '../../src/modules/accounts/account.defaults';
 
 const app = createApp();
 
@@ -30,6 +32,19 @@ describe('Auth (e2e)', () => {
       });
 
       expect(res.status).toBe(409);
+    });
+
+    it('cria exatamente uma conta padrão para o usuário novo', async () => {
+      const res = await request(app).post('/auth/register').send({
+        email: 'comconta@financi.dev',
+        password: 'senha12345',
+      });
+
+      const accounts = await prisma.account.findMany({ where: { userId: res.body.user.id } });
+
+      expect(accounts).toHaveLength(1);
+      expect(accounts[0]?.name).toBe(DEFAULT_ACCOUNT.name);
+      expect(accounts[0]?.kind).toBe(DEFAULT_ACCOUNT.kind);
     });
 
     it('rejeita senha curta demais', async () => {

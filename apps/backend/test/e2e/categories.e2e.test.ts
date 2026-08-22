@@ -1,7 +1,10 @@
 import request from 'supertest';
 import { createApp } from '../../src/app';
 import { createCategory, registerUser } from './helpers';
-import { DEFAULT_CATEGORIES } from '../../src/modules/categories/category.defaults';
+import {
+  DEFAULT_CATEGORIES,
+  SYSTEM_CATEGORIES,
+} from '../../src/modules/categories/category.defaults';
 
 const app = createApp();
 
@@ -135,6 +138,30 @@ describe('Categories (e2e)', () => {
     expect(res.body.map((category: { name: string }) => category.name)).toEqual(
       expect.arrayContaining(['Salário', 'Alimentação', 'Transporte']),
     );
+  });
+
+  it('esconde as categorias de sistema da listagem', async () => {
+    const { token } = await registerUser(app);
+
+    const res = await request(app).get('/categories').set('Authorization', `Bearer ${token}`);
+
+    expect(res.body.map((category: { name: string }) => category.name)).not.toContain(
+      'Transferência',
+    );
+    expect(res.body.every((category: { system: boolean }) => category.system === false)).toBe(true);
+  });
+
+  it('devolve as categorias de sistema com includeSystem=true', async () => {
+    const { token } = await registerUser(app);
+
+    const res = await request(app)
+      .get('/categories?includeSystem=true')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.body).toHaveLength(DEFAULT_CATEGORIES.length + SYSTEM_CATEGORIES.length);
+    expect(
+      res.body.filter((category: { name: string }) => category.name === 'Transferência'),
+    ).toHaveLength(2);
   });
 
   it('cria as categorias padrão já separadas por tipo', async () => {

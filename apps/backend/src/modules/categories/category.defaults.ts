@@ -4,6 +4,7 @@ interface DefaultCategory {
   name: string;
   type: TransactionType;
   color: string;
+  system?: boolean;
 }
 
 export const DEFAULT_CATEGORIES: DefaultCategory[] = [
@@ -20,4 +21,11 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
   { name: 'Compras', type: 'EXPENSE', color: '#F9A825' },
   { name: 'Contas e serviços', type: 'EXPENSE', color: '#37474F' },
   { name: 'Outras despesas', type: 'EXPENSE', color: '#616161' },
+];
+
+export const SYSTEM_TRANSFER_CATEGORY_NAME = 'Transferência';
+
+export const SYSTEM_CATEGORIES: DefaultCategory[] = [
+  { name: SYSTEM_TRANSFER_CATEGORY_NAME, type: 'INCOME', color: '#546E7A', system: true },
+  { name: SYSTEM_TRANSFER_CATEGORY_NAME, type: 'EXPENSE', color: '#546E7A', system: true },
 ];

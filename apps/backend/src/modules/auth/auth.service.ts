@@ -1,5 +1,6 @@
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
+import { createDefaultAccount } from '../accounts/account.service';
 import { createDefaultCategories } from '../categories/category.service';
 import { NotFoundError, ConflictError, UnauthorizedError } from '../../utils/AppError';
 import { signAccessToken } from '../../utils/jwt';
@@ -31,10 +32,8 @@ async function issueRefreshToken(userId: string): Promise<string> {
 }
 
 async function buildAuthResult(user: AuthUser): Promise<AuthResult> {
-  const [token, refreshToken] = await Promise.all([
-    signAccessToken({ sub: user.id, email: user.email }),
-    issueRefreshToken(user.id),
-  ]);
+  const token = signAccessToken({ sub: user.id, email: user.email });
+  const refreshToken = await issueRefreshToken(user.id);
 
   return { user, token, refreshToken };
 }
@@ -58,6 +57,7 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
     });
 
     await createDefaultCategories(created.id, tx);
+    await createDefaultAccount(created.id, tx);
 
     return created;
   });

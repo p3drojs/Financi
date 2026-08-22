@@ -1,4 +1,5 @@
 import { prisma } from '../src/config/prisma';
+import { createDefaultAccount } from '../src/modules/accounts/account.service';
 import { createDefaultCategories } from '../src/modules/categories/category.service';
 import { hashPassword } from '../src/utils/password';
 
@@ -19,15 +20,20 @@ export async function resetSeedUser() {
       });
 
   await createDefaultCategories(user.id);
+  await createDefaultAccount(user.id);
 
   return user;
 }
 
 async function resetExistingUser(userId: string, passwordHash: string) {
+  await prisma.goalContribution.deleteMany({ where: { goal: { userId } } });
+  await prisma.goal.deleteMany({ where: { userId } });
+  await prisma.budget.deleteMany({ where: { userId } });
   await prisma.transaction.deleteMany({ where: { userId } });
   await prisma.recurrence.deleteMany({ where: { userId } });
   await prisma.tag.deleteMany({ where: { userId } });
   await prisma.category.deleteMany({ where: { userId } });
+  await prisma.account.deleteMany({ where: { userId } });
 
   return prisma.user.update({
     where: { id: userId },

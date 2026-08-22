@@ -1,15 +1,18 @@
-import { Prisma, TransactionType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { ConflictError, NotFoundError } from '../../utils/AppError';
-import { CreateCategoryInput, UpdateCategoryInput } from './category.schema';
-import { DEFAULT_CATEGORIES } from './category.defaults';
+import { CreateCategoryInput, ListCategoriesQuery, UpdateCategoryInput } from './category.schema';
+import { DEFAULT_CATEGORIES, SYSTEM_CATEGORIES } from './category.defaults';
 
 export async function createDefaultCategories(
   userId: string,
   client: Prisma.TransactionClient = prisma,
 ) {
   return client.category.createMany({
-    data: DEFAULT_CATEGORIES.map((category) => ({ userId, ...category })),
+    data: [...DEFAULT_CATEGORIES, ...SYSTEM_CATEGORIES].map((category) => ({
+      userId,
+      ...category,
+    })),
     skipDuplicates: true,
   });
 }
@@ -33,9 +36,13 @@ export async function createCategory(userId: string, input: CreateCategoryInput)
   });
 }
 
-export async function listCategories(userId: string, type?: TransactionType) {
+export async function listCategories(userId: string, query: ListCategoriesQuery) {
   return prisma.category.findMany({
-    where: { userId, ...(type ? { type } : {}) },
+    where: {
+      userId,
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.includeSystem ? {} : { system: false }),
+    },
     orderBy: { name: 'asc' },
   });
 }
