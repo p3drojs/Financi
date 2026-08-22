@@ -20,6 +20,10 @@ export default function SignInScreen() {
   const [error, setError] = useState<unknown>(null);
 
   const registering = mode === 'register';
+  const missing = MIN_PASSWORD - password.length;
+  const missingLabel = missing === 1 ? 'falta 1 caractere' : `faltam ${missing} caracteres`;
+  const passwordShort = registering && password.length > 0 && missing > 0;
+  const passwordError = passwordShort ? missingLabel : undefined;
   const complete =
     email.trim().length > 0 &&
     password.length >= (registering ? MIN_PASSWORD : 1);
@@ -94,6 +98,7 @@ export default function SignInScreen() {
           secureTextEntry
           autoCapitalize="none"
           hint={registering ? `no mínimo ${MIN_PASSWORD} caracteres` : undefined}
+          error={passwordError}
         />
       </View>
 

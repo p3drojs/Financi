@@ -7,6 +7,7 @@ interface TextFieldProps {
   onChangeText: (value: string) => void;
   placeholder?: string;
   hint?: string;
+  error?: string;
   keyboardType?: 'default' | 'email-address' | 'decimal-pad' | 'numeric';
   secureTextEntry?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words';
@@ -19,6 +20,7 @@ export function TextField({
   onChangeText,
   placeholder,
   hint,
+  error,
   keyboardType = 'default',
   secureTextEntry = false,
   autoCapitalize = 'sentences',
@@ -36,9 +38,10 @@ export function TextField({
         secureTextEntry={secureTextEntry}
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
-        style={[styles.input, inputStyle]}
+        style={[styles.input, error ? styles.inputError : null, inputStyle]}
       />
-      {hint ? <Text style={[type.caption, styles.hint]}>{hint}</Text> : null}
+      {error ? <Text style={[type.caption, styles.error]}>{error}</Text> : null}
+      {!error && hint ? <Text style={[type.caption, styles.hint]}>{hint}</Text> : null}
     </View>
   );
 }
@@ -53,5 +56,7 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     minHeight: 34,
   },
+  inputError: { borderBottomColor: colors.brickRule },
   hint: { marginTop: 3 },
+  error: { marginTop: 3, color: colors.brick },
 });
