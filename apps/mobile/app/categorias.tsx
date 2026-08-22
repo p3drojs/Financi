@@ -1,11 +1,12 @@
 import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCategories } from '@/api/queries';
 import { Category, TransactionType } from '@/api/types';
 import { BackHeader } from '@/components/BackHeader';
 import { Screen } from '@/components/Screen';
+import { ErrorState, Loading } from '@/components/States';
 import { Stroke } from '@/components/Stroke';
 import { ChevronRight } from '@/components/icons';
-import { categories } from '@/mock/data';
 import { onPaper } from '@/theme/categoryColors';
 import { colors, fonts, space, type } from '@/theme/tokens';
 
@@ -15,6 +16,9 @@ const SECTIONS: { type: TransactionType; title: string }[] = [
 ];
 
 export default function CategoriesScreen() {
+  const query = useCategories();
+  const categories = query.data ?? [];
+
   return (
     <Screen scroll contentStyle={styles.content}>
       <BackHeader title="categorias" />
@@ -24,21 +28,27 @@ export default function CategoriesScreen() {
         mesmo tipo.
       </Text>
 
-      {SECTIONS.map((section) => {
-        const items = categories.filter((item) => item.type === section.type);
+      {query.error ? (
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      ) : query.isPending ? (
+        <Loading label="lendo as categorias" />
+      ) : (
+        SECTIONS.map((section) => {
+          const items = categories.filter((item) => item.type === section.type);
 
-        return (
-          <View key={section.type} style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={type.label}>{section.title}</Text>
-              <Text style={type.caption}>{items.length}</Text>
+          return (
+            <View key={section.type} style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={type.label}>{section.title}</Text>
+                <Text style={type.caption}>{items.length}</Text>
+              </View>
+              {items.map((item) => (
+                <CategoryRow key={item.id} item={item} />
+              ))}
             </View>
-            {items.map((item) => (
-              <CategoryRow key={item.id} item={item} />
-            ))}
-          </View>
-        );
-      })}
+          );
+        })
+      )}
 
       <Link href="/categoria/nova" asChild>
         <Pressable style={styles.create}>

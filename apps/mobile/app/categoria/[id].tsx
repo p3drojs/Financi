@@ -1,18 +1,22 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCategories, useCreateCategory, useDeleteCategory, useUpdateCategory } from '@/api/queries';
 import { TransactionType } from '@/api/types';
 import { Actions } from '@/components/Actions';
 import { BackHeader } from '@/components/BackHeader';
 import { Field } from '@/components/Field';
 import { Screen } from '@/components/Screen';
 import { Segmented } from '@/components/Segmented';
+import { InlineError, Loading } from '@/components/States';
 import { Stroke } from '@/components/Stroke';
 import { TextField } from '@/components/TextField';
-import { categories, transactions } from '@/mock/data';
 import { onPaper } from '@/theme/categoryColors';
 import { CATEGORY_PALETTE } from '@/theme/palette';
 import { colors, fonts, type } from '@/theme/tokens';
+
+const NEW = 'nova';
+const FALLBACK_COLOR = CATEGORY_PALETTE[0] ?? '#616161';
 
 const TYPE_OPTIONS: { value: TransactionType; label: string }[] = [
   { value: 'EXPENSE', label: 'o que sai' },
@@ -22,19 +26,93 @@ const TYPE_OPTIONS: { value: TransactionType; label: string }[] = [
 export default function CategoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const creating = id === NEW;
 
-  const existing = categories.find((item) => item.id === id);
-  const [name, setName] = useState(existing?.name ?? '');
-  const [color, setColor] = useState(existing?.color ?? CATEGORY_PALETTE[0] ?? '#616161');
-  const [kind, setKind] = useState<TransactionType>(existing?.type ?? 'EXPENSE');
+  const query = useCategories();
+  const existing = creating ? undefined : query.data?.find((item) => item.id === id);
 
-  const inUse = existing
-    ? transactions.some((item) => item.categoryId === existing.id)
-    : false;
+  if (!creating && query.isPending) {
+    return (
+      <Screen scroll>
+        <BackHeader title="categoria" compact />
+        <Loading label="lendo a categoria" />
+      </Screen>
+    );
+  }
+
+  if (!creating && !existing) {
+    return (
+      <Screen scroll>
+        <BackHeader title="categoria" compact />
+        <Text style={styles.missing}>essa categoria não está mais aqui.</Text>
+      </Screen>
+    );
+  }
+
+  return (
+    <CategoryForm
+      key={existing?.id ?? NEW}
+      categoryId={existing?.id ?? null}
+      initialName={existing?.name ?? ''}
+      initialColor={existing?.color ?? FALLBACK_COLOR}
+      initialType={existing?.type ?? 'EXPENSE'}
+      onDone={() => router.back()}
+    />
+  );
+}
+
+interface CategoryFormProps {
+  categoryId: string | null;
+  initialName: string;
+  initialColor: string;
+  initialType: TransactionType;
+  onDone: () => void;
+}
+
+function CategoryForm({
+  categoryId,
+  initialName,
+  initialColor,
+  initialType,
+  onDone,
+}: CategoryFormProps) {
+  const [name, setName] = useState(initialName);
+  const [color, setColor] = useState(initialColor);
+  const [kind, setKind] = useState<TransactionType>(initialType);
+
+  const create = useCreateCategory();
+  const update = useUpdateCategory(categoryId ?? '');
+  const remove = useDeleteCategory();
+
+  const editing = categoryId !== null;
+  const busy = create.isPending || update.isPending || remove.isPending;
+  const failure = create.error ?? update.error ?? remove.error;
+
+  const save = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    if (editing) {
+      update.mutate({ name: trimmed, color }, { onSuccess: onDone });
+    } else {
+      create.mutate({ name: trimmed, type: kind, color }, { onSuccess: onDone });
+    }
+  };
+
+  const confirmDelete = () => {
+    Alert.alert('apagar categoria', `"${initialName}" some da lista.`, [
+      { text: 'deixar como está', style: 'cancel' },
+      {
+        text: 'apagar',
+        style: 'destructive',
+        onPress: () => remove.mutate(categoryId as string, { onSuccess: onDone }),
+      },
+    ]);
+  };
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <BackHeader title={existing ? existing.name : 'categoria nova'} compact />
+      <BackHeader title={editing ? initialName : 'categoria nova'} compact />
 
       <View style={styles.fields}>
         <TextField
@@ -45,11 +123,9 @@ export default function CategoryScreen() {
           autoCapitalize="sentences"
         />
 
-        {existing ? (
+        {editing ? (
           <Field label="de que tipo">
-            <Text style={type.field}>
-              {existing.type === 'INCOME' ? 'o que entra' : 'o que sai'}
-            </Text>
+            <Text style={type.field}>{kind === 'INCOME' ? 'o que entra' : 'o que sai'}</Text>
           </Field>
         ) : (
           <View style={styles.typeBlock}>
@@ -80,18 +156,25 @@ export default function CategoryScreen() {
 
       <View style={styles.spacer} />
 
-      {existing && inUse ? (
+      <View style={styles.errorSlot}>
+        <InlineError error={failure} />
+      </View>
+
+      {editing ? (
         <Text style={styles.warning}>
-          esta categoria está em uso — para apagar, mude os lançamentos dela de categoria antes.
+          categoria usada por lançamento ou repetição não pode ser apagada — mude os lançamentos
+          de categoria antes.
         </Text>
       ) : null}
 
       <Actions
         primaryLabel="guardar"
-        onPrimary={() => router.back()}
-        secondaryLabel={existing ? 'apagar' : 'descartar'}
-        onSecondary={() => router.back()}
-        secondaryTone={existing ? 'danger' : 'muted'}
+        onPrimary={save}
+        busy={busy}
+        disabled={name.trim().length === 0}
+        secondaryLabel={editing ? 'apagar' : 'descartar'}
+        onSecondary={editing ? confirmDelete : onDone}
+        secondaryTone={editing ? 'danger' : 'muted'}
       />
     </Screen>
   );
@@ -114,11 +197,18 @@ const styles = StyleSheet.create({
   },
   swatchActive: { borderColor: colors.rule, backgroundColor: colors.paperRaised },
   spacer: { flexGrow: 1, minHeight: 30 },
+  errorSlot: { marginBottom: 12 },
   warning: {
     fontFamily: fonts.sans,
     fontSize: 12,
     lineHeight: 18,
-    color: colors.brick,
+    color: colors.inkFaint,
     marginBottom: 18,
+  },
+  missing: {
+    marginTop: 30,
+    fontFamily: fonts.serifItalic,
+    fontSize: 16,
+    color: colors.inkFaint,
   },
 });
