@@ -90,6 +90,59 @@ paths:
         '401':
           description: Email ou senha inválidos
 
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Retorna o usuário autenticado
+      responses:
+        '200':
+          description: Usuário atual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Token ausente ou inválido
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Troca um refresh token válido por um par novo de tokens
+      description: >
+        O refresh token usado é revogado (rotação) — cada refresh token só pode
+        ser usado uma vez.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshInput'
+      responses:
+        '200':
+          description: Par novo de tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Refresh token inválido, revogado ou expirado
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Revoga um refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshInput'
+      responses:
+        '204':
+          description: Sessão encerrada (sempre retorna 204, mesmo se o token já não existir)
+
   /categories:
     get:
       tags: [Categories]
@@ -529,24 +582,37 @@ components:
         password:
           type: string
 
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          nullable: true
+
     AuthResponse:
       type: object
       properties:
         user:
-          type: object
-          properties:
-            id:
-              type: string
-              format: uuid
-            email:
-              type: string
-              format: email
-            name:
-              type: string
-              nullable: true
+          $ref: '#/components/schemas/User'
         token:
           type: string
-          description: JWT de acesso
+          description: JWT de acesso, curta duração
+        refreshToken:
+          type: string
+          description: Token opaco de longa duração, usado em /auth/refresh
+
+    RefreshInput:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
 
     Category:
       type: object

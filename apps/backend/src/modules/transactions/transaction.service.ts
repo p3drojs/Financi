@@ -417,9 +417,7 @@ export async function updateRecurrence(
     input.endDate !== undefined ||
     input.occurrences !== undefined;
   const valuesChanged =
-    input.categoryId !== undefined ||
-    input.amount !== undefined ||
-    input.description !== undefined;
+    input.categoryId !== undefined || input.amount !== undefined || input.description !== undefined;
 
   if (scheduleChanged) {
     await rescheduleFutureOccurrences(updated, now);

@@ -15,5 +15,19 @@ export const loginSchema = z.object({
   }),
 });
 
+export const refreshSchema = z.object({
+  body: z.object({
+    refreshToken: z.string().min(1, 'refreshToken é obrigatório'),
+  }),
+});
+
+export const logoutSchema = z.object({
+  body: z.object({
+    refreshToken: z.string().min(1, 'refreshToken é obrigatório'),
+  }),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>['body'];
 export type LoginInput = z.infer<typeof loginSchema>['body'];
+export type RefreshInput = z.infer<typeof refreshSchema>['body'];
+export type LogoutInput = z.infer<typeof logoutSchema>['body'];

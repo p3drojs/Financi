@@ -18,6 +18,7 @@
     "src/modules/transactions/installment.util.ts",
     "src/utils/password.ts",
     "src/utils/jwt.ts",
+    "src/utils/refreshToken.ts",
     "!src/**/*.test.ts"
   ],
   "reporters": ["html", "clear-text", "progress"],
