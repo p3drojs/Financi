@@ -20,13 +20,17 @@ import { colors } from '@/theme/tokens';
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
-  const [serifLoaded] = useNewsreader({
+  const [serifLoaded, serifError] = useNewsreader({
     Newsreader_200ExtraLight,
     Newsreader_300Light,
     Newsreader_300Light_Italic,
   });
-  const [sansLoaded] = useKarla({ Karla_300Light, Karla_400Regular, Karla_500Medium });
-  const ready = serifLoaded && sansLoaded;
+  const [sansLoaded, sansError] = useKarla({
+    Karla_300Light,
+    Karla_400Regular,
+    Karla_500Medium,
+  });
+  const ready = Boolean(serifLoaded || serifError) && Boolean(sansLoaded || sansError);
 
   useEffect(() => {
     if (ready) {
