@@ -1,69 +1,130 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCategories, useCreateInstallments } from '@/api/queries';
+import { TransactionType } from '@/api/types';
 import { Actions } from '@/components/Actions';
 import { BackHeader } from '@/components/BackHeader';
-import { Field } from '@/components/Field';
+import { CategoryField } from '@/components/CategoryField';
+import { DateField } from '@/components/DateField';
 import { Screen } from '@/components/Screen';
-import { Stroke } from '@/components/Stroke';
+import { Segmented } from '@/components/Segmented';
+import { InlineError } from '@/components/States';
+import { TagsField } from '@/components/TagsField';
+import { TextField } from '@/components/TextField';
 import { WavyRule } from '@/components/WavyRule';
-import { ChevronDown, StepMinus, StepPlus } from '@/components/icons';
+import { StepMinus, StepPlus } from '@/components/icons';
 import { fullDate, money } from '@/lib/format';
 import { addMonths, splitInstallments } from '@/lib/installments';
-import { categoryById, installmentDraft } from '@/mock/data';
-import { onPaper } from '@/theme/categoryColors';
+import { parseAmount } from '@/lib/money';
 import { colors, fonts, space, tabular, type } from '@/theme/tokens';
 
 const MIN_INSTALLMENTS = 2;
 const MAX_INSTALLMENTS = 60;
 
+const TYPE_OPTIONS: { value: TransactionType; label: string }[] = [
+  { value: 'EXPENSE', label: 'saiu' },
+  { value: 'INCOME', label: 'entrou' },
+];
+
+function today(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString();
+}
+
 export default function NewInstallmentScreen() {
   const router = useRouter();
-  const [count, setCount] = useState(installmentDraft.installmentTotal);
+  const params = useLocalSearchParams<{
+    type?: string;
+    amount?: string;
+    description?: string;
+    date?: string;
+    categoryId?: string;
+    tags?: string;
+  }>();
 
-  const category = categoryById(installmentDraft.categoryId);
-  const color = onPaper(category.color);
-  const split = splitInstallments(installmentDraft.amount, count);
-  const lastDate = addMonths(installmentDraft.startDate, count - 1);
+  const [kind, setKind] = useState<TransactionType>(
+    params.type === 'INCOME' ? 'INCOME' : 'EXPENSE',
+  );
+  const [amount, setAmount] = useState(params.amount ?? '');
+  const [description, setDescription] = useState(params.description ?? '');
+  const [categoryId, setCategoryId] = useState<string | null>(params.categoryId ?? null);
+  const [startDate, setStartDate] = useState(params.date ?? today());
+  const [count, setCount] = useState(6);
+  const [tagNames, setTagNames] = useState<string[]>(
+    params.tags ? params.tags.split(',').filter(Boolean) : [],
+  );
+
+  const categories = useCategories(kind);
+  const create = useCreateInstallments();
+
+  const parsed = parseAmount(amount);
+  const split = splitInstallments(parsed ?? 0, count);
+  const lastDate = addMonths(startDate, count - 1);
+  const ready = parsed !== null && categoryId !== null;
+
+  const onKindChange = (next: TransactionType) => {
+    setKind(next);
+    setCategoryId(null);
+  };
+
+  const submit = () => {
+    if (!ready) return;
+
+    create.mutate(
+      {
+        categoryId: categoryId as string,
+        type: kind,
+        amount: parsed as number,
+        ...(description.trim() ? { description: description.trim() } : {}),
+        ...(tagNames.length > 0 ? { tagNames } : {}),
+        startDate,
+        installmentTotal: count,
+      },
+      { onSuccess: () => router.dismissAll() },
+    );
+  };
 
   return (
     <Screen scroll contentStyle={styles.content}>
       <BackHeader title="parcelar uma compra" />
 
+      <View style={styles.kind}>
+        <Segmented options={TYPE_OPTIONS} value={kind} onChange={onKindChange} />
+      </View>
+
       <View style={styles.fields}>
-        <Field label="o que foi">
-          <Text style={type.field}>{installmentDraft.description}</Text>
-        </Field>
+        <TextField
+          label="o que foi"
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Notebook Dell Inspiron 14"
+        />
 
-        <Field label="quanto, no total">
-          <View style={styles.amountRow}>
-            <Text style={styles.currency}>R$</Text>
-            <Text style={styles.amount}>{money(installmentDraft.amount)}</Text>
-          </View>
-        </Field>
+        <TextField
+          label="quanto, no total"
+          value={amount}
+          onChangeText={setAmount}
+          placeholder="0,00"
+          keyboardType="decimal-pad"
+          inputStyle={styles.amountInput}
+          hint={amount.length > 0 && parsed === null ? 'um valor maior que zero' : undefined}
+        />
 
-        <Field
-          label="em que categoria"
+        <CategoryField
+          categories={categories.data ?? []}
+          value={categoryId}
+          onChange={setCategoryId}
           hint={
-            category.type === 'EXPENSE'
+            kind === 'EXPENSE'
               ? 'categoria de saída, então isto entra como saída'
               : 'categoria de entrada, então isto entra como entrada'
           }
-        >
-          <View style={styles.categoryRow}>
-            <View style={styles.categoryName}>
-              <Stroke color={color} width={20} />
-              <Text style={type.field}>{category.name}</Text>
-            </View>
-            <ChevronDown size={9} />
-          </View>
-        </Field>
+        />
 
         <View style={styles.splitRow}>
           <View style={styles.splitDate}>
-            <Field label="primeira parcela">
-              <Text style={[type.field, tabular]}>{fullDate(installmentDraft.startDate)}</Text>
-            </Field>
+            <DateField label="primeira parcela" value={startDate} onChange={setStartDate} />
           </View>
 
           <View style={styles.stepperBlock}>
@@ -71,14 +132,14 @@ export default function NewInstallmentScreen() {
             <View style={styles.stepper}>
               <Pressable
                 style={styles.stepButton}
-                onPress={() => setCount((value) => Math.max(MIN_INSTALLMENTS, value - 1))}
+                onPress={() => setCount(Math.max(MIN_INSTALLMENTS, count - 1))}
               >
                 <StepMinus color={count > MIN_INSTALLMENTS ? colors.inkMuted : colors.rule} />
               </Pressable>
               <Text style={styles.stepValue}>{count}</Text>
               <Pressable
                 style={styles.stepButton}
-                onPress={() => setCount((value) => Math.min(MAX_INSTALLMENTS, value + 1))}
+                onPress={() => setCount(Math.min(MAX_INSTALLMENTS, count + 1))}
               >
                 <StepPlus color={count < MAX_INSTALLMENTS ? colors.inkMuted : colors.rule} />
               </Pressable>
@@ -86,16 +147,7 @@ export default function NewInstallmentScreen() {
           </View>
         </View>
 
-        <Field label="etiquetas">
-          <View style={styles.tags}>
-            {installmentDraft.tagNames.map((name) => (
-              <Text key={name} style={type.field}>
-                {name}
-              </Text>
-            ))}
-            <Text style={styles.tagPlaceholder}>escrever outra</Text>
-          </View>
-        </Field>
+        <TagsField value={tagNames} onChange={setTagNames} />
       </View>
 
       <View style={styles.divider}>
@@ -128,15 +180,21 @@ export default function NewInstallmentScreen() {
         )}
 
         <Text style={styles.previewNote}>
-          {remainderNote(split.remainderCents)} — de {fullDate(installmentDraft.startDate)} a{' '}
-          {fullDate(lastDate)}
+          {remainderNote(split.remainderCents)} — de {fullDate(startDate)} a {fullDate(lastDate)}
         </Text>
       </View>
 
       <View style={styles.spacer} />
 
+      <View style={styles.errorSlot}>
+        <InlineError error={create.error} />
+      </View>
+
       <Actions
         primaryLabel={`lançar as ${count}`}
+        onPrimary={submit}
+        busy={create.isPending}
+        disabled={!ready}
         secondaryLabel="descartar"
         onSecondary={() => router.back()}
       />
@@ -152,19 +210,9 @@ function remainderNote(cents: number): string {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 34 },
-  fields: { marginTop: 28, gap: 24 },
-  amountRow: { flexDirection: 'row', alignItems: 'baseline', gap: 7 },
-  currency: { fontFamily: fonts.serif, fontSize: 16, color: colors.inkFaint },
-  amount: {
-    fontFamily: fonts.serif,
-    fontSize: 34,
-    lineHeight: 38,
-    letterSpacing: -0.7,
-    color: colors.ink,
-    ...tabular,
-  },
-  categoryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  categoryName: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  kind: { marginTop: 14 },
+  fields: { marginTop: 24, gap: 24 },
+  amountInput: { fontFamily: fonts.serif, fontSize: 34, ...tabular },
   splitRow: { flexDirection: 'row', gap: 20, alignItems: 'flex-end' },
   splitDate: { flexGrow: 1 },
   stepperBlock: { gap: 6 },
@@ -189,8 +237,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     ...tabular,
   },
-  tags: { flexDirection: 'row', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
-  tagPlaceholder: { fontFamily: fonts.sans, fontSize: 17, color: colors.inkGhost },
   divider: { marginTop: 30 },
   preview: { marginTop: 20, gap: 11 },
   previewRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
@@ -200,4 +246,5 @@ const styles = StyleSheet.create({
   previewValueStrong: { color: colors.ink },
   previewNote: { fontFamily: fonts.sans, fontSize: 12, color: colors.inkFaint, marginTop: 2 },
   spacer: { flexGrow: 1, minHeight: 30 },
+  errorSlot: { marginBottom: 12 },
 });

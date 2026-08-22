@@ -1,24 +1,29 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCategories, useCreateRecurring, useCreateTransaction } from '@/api/queries';
 import { TransactionType } from '@/api/types';
 import { Actions } from '@/components/Actions';
 import { BackHeader } from '@/components/BackHeader';
+import { DateField } from '@/components/DateField';
 import { Field } from '@/components/Field';
+import { PickerSheet } from '@/components/PickerSheet';
 import { Screen } from '@/components/Screen';
 import { Segmented } from '@/components/Segmented';
+import { InlineError, Loading } from '@/components/States';
 import { Stroke } from '@/components/Stroke';
+import { TagsField } from '@/components/TagsField';
 import { TextField } from '@/components/TextField';
 import { WavyRule } from '@/components/WavyRule';
 import { ChevronDown, StepMinus, StepPlus } from '@/components/icons';
-import { fullDate, intervalLabel, monthYear } from '@/lib/format';
-import { addMonths } from '@/lib/installments';
-import { categories } from '@/mock/data';
+import { intervalLabel, monthYear } from '@/lib/format';
+import { parseAmount } from '@/lib/money';
 import { onPaper } from '@/theme/categoryColors';
 import { colors, fonts, space, tabular, type } from '@/theme/tokens';
 
 const BATCH_WINDOW_MONTHS = 12;
 const MAX_INTERVAL = 60;
+const MAX_OCCURRENCES = 600;
 
 type Repeat = 'once' | 'repeat' | 'split';
 type Ending = 'open' | 'date' | 'count';
@@ -34,28 +39,50 @@ const REPEAT_OPTIONS: { value: Repeat; label: string }[] = [
   { value: 'split', label: 'parcelar' },
 ];
 
-const ENDING_OPTIONS: { value: Ending; label: string }[] = [
-  { value: 'open', label: 'sem fim' },
-  { value: 'date', label: 'até uma data' },
-  { value: 'count', label: 'um número de vezes' },
-];
+const ENDING_LABELS: Record<Ending, string> = {
+  open: 'sem fim',
+  date: 'até uma data',
+  count: 'um número de vezes',
+};
+
+function today(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString();
+}
+
+function shiftIso(iso: string, months: number): string {
+  const source = new Date(iso);
+  return new Date(
+    Date.UTC(source.getUTCFullYear(), source.getUTCMonth() + months, source.getUTCDate()),
+  ).toISOString();
+}
 
 export default function NewTransactionScreen() {
   const router = useRouter();
-  const today = new Date().toISOString();
+  const [start] = useState(today);
 
   const [kind, setKind] = useState<TransactionType>('EXPENSE');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [tag, setTag] = useState('');
+  const [date, setDate] = useState(start);
+  const [tagNames, setTagNames] = useState<string[]>([]);
   const [repeat, setRepeat] = useState<Repeat>('once');
   const [intervalMonths, setIntervalMonths] = useState(1);
   const [ending, setEnding] = useState<Ending>('open');
+  const [endDate, setEndDate] = useState(() => shiftIso(start, BATCH_WINDOW_MONTHS));
   const [occurrences, setOccurrences] = useState(12);
+  const [endingOpen, setEndingOpen] = useState(false);
 
-  const available = categories.filter((item) => item.type === kind);
-  const selected = available.find((item) => item.id === categoryId) ?? null;
+  const categories = useCategories(kind);
+  const createOnce = useCreateTransaction();
+  const createRecurring = useCreateRecurring();
+
+  const available = categories.data ?? [];
+  const parsed = parseAmount(amount);
+  const busy = createOnce.isPending || createRecurring.isPending;
+  const failure = createOnce.error ?? createRecurring.error;
+  const ready = parsed !== null && categoryId !== null;
 
   const onKindChange = (next: TransactionType) => {
     setKind(next);
@@ -64,10 +91,51 @@ export default function NewTransactionScreen() {
 
   const onRepeatChange = (next: Repeat) => {
     if (next === 'split') {
-      router.push('/nova/parcelada');
+      router.push({
+        pathname: '/nova/parcelada',
+        params: {
+          type: kind,
+          amount,
+          description,
+          date,
+          ...(categoryId ? { categoryId } : {}),
+          ...(tagNames.length > 0 ? { tags: tagNames.join(',') } : {}),
+        },
+      });
       return;
     }
+
     setRepeat(next);
+  };
+
+  const submit = () => {
+    if (!ready) return;
+
+    const base = {
+      categoryId: categoryId as string,
+      type: kind,
+      amount: parsed as number,
+      ...(description.trim() ? { description: description.trim() } : {}),
+      ...(tagNames.length > 0 ? { tagNames } : {}),
+    };
+
+    const done = { onSuccess: () => router.back() };
+
+    if (repeat === 'repeat') {
+      createRecurring.mutate(
+        {
+          ...base,
+          startDate: date,
+          intervalMonths,
+          ...(ending === 'date' ? { endDate } : {}),
+          ...(ending === 'count' ? { occurrences } : {}),
+        },
+        done,
+      );
+      return;
+    }
+
+    createOnce.mutate({ ...base, date }, done);
   };
 
   return (
@@ -86,6 +154,7 @@ export default function NewTransactionScreen() {
           placeholder="0,00"
           keyboardType="decimal-pad"
           inputStyle={styles.amountInput}
+          hint={amount.length > 0 && parsed === null ? 'um valor maior que zero' : undefined}
         />
 
         <TextField
@@ -97,43 +166,40 @@ export default function NewTransactionScreen() {
 
         <View style={styles.categoryBlock}>
           <Text style={type.label}>em que categoria</Text>
-          <View style={styles.grid}>
-            {available.map((item) => {
-              const active = item.id === categoryId;
-              return (
-                <Pressable
-                  key={item.id}
-                  onPress={() => setCategoryId(item.id)}
-                  style={[styles.chip, active ? styles.chipActive : null]}
-                >
-                  <Stroke color={onPaper(item.color)} width={16} thickness={2.4} />
-                  <Text style={[styles.chipLabel, active ? styles.chipLabelActive : null]}>
-                    {item.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {selected ? null : (
+          {categories.isPending ? (
+            <Loading label="lendo as categorias" />
+          ) : (
+            <View style={styles.grid}>
+              {available.map((item) => {
+                const active = item.id === categoryId;
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => setCategoryId(item.id)}
+                    style={[styles.chip, active ? styles.chipActive : null]}
+                  >
+                    <Stroke color={onPaper(item.color)} width={16} thickness={2.4} />
+                    <Text style={[styles.chipLabel, active ? styles.chipLabelActive : null]}>
+                      {item.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+          {categoryId ? null : (
             <Text style={type.caption}>
-              o tipo do lançamento vem da categoria — só aparecem as de {kind === 'EXPENSE' ? 'saída' : 'entrada'}
+              o tipo do lançamento vem da categoria — só aparecem as de{' '}
+              {kind === 'EXPENSE' ? 'saída' : 'entrada'}
             </Text>
           )}
         </View>
 
-        <Field label="quando">
-          <View style={styles.dateRow}>
-            <Text style={[type.field, tabular]}>{fullDate(today)}</Text>
-            <ChevronDown size={9} />
-          </View>
-        </Field>
+        <DateField label="quando" value={date} onChange={setDate} />
 
-        <TextField
-          label="etiquetas"
-          value={tag}
-          onChangeText={setTag}
-          placeholder="escrever uma"
-          autoCapitalize="none"
+        <TagsField
+          value={tagNames}
+          onChange={setTagNames}
           hint="nasce na hora se ainda não existir"
         />
       </View>
@@ -148,66 +214,39 @@ export default function NewTransactionScreen() {
 
         {repeat === 'repeat' ? (
           <View style={styles.repeatDetail}>
-            <View style={styles.stepperBlock}>
-              <Text style={type.label}>a cada quantos meses</Text>
-              <View style={styles.stepper}>
-                <Pressable
-                  style={styles.stepButton}
-                  onPress={() => setIntervalMonths((value) => Math.max(1, value - 1))}
-                >
-                  <StepMinus color={intervalMonths > 1 ? colors.inkMuted : colors.rule} />
-                </Pressable>
-                <Text style={styles.stepValue}>{intervalMonths}</Text>
-                <Pressable
-                  style={styles.stepButton}
-                  onPress={() => setIntervalMonths((value) => Math.min(MAX_INTERVAL, value + 1))}
-                >
-                  <StepPlus color={intervalMonths < MAX_INTERVAL ? colors.inkMuted : colors.rule} />
-                </Pressable>
-              </View>
-              <Text style={type.caption}>{intervalLabel(intervalMonths)}</Text>
-            </View>
+            <Stepper
+              label="a cada quantos meses"
+              value={intervalMonths}
+              min={1}
+              max={MAX_INTERVAL}
+              onChange={setIntervalMonths}
+              caption={intervalLabel(intervalMonths)}
+            />
 
-            <View style={styles.endingBlock}>
-              <Text style={type.label}>até quando</Text>
-              <Segmented options={ENDING_OPTIONS} value={ending} onChange={setEnding} />
-            </View>
+            <Field label="até quando">
+              <Pressable style={styles.pickerRow} onPress={() => setEndingOpen(true)}>
+                <Text style={type.field}>{ENDING_LABELS[ending]}</Text>
+                <ChevronDown size={9} />
+              </Pressable>
+            </Field>
 
             {ending === 'count' ? (
-              <View style={styles.stepperBlock}>
-                <Text style={type.label}>quantas vezes</Text>
-                <View style={styles.stepper}>
-                  <Pressable
-                    style={styles.stepButton}
-                    onPress={() => setOccurrences((value) => Math.max(1, value - 1))}
-                  >
-                    <StepMinus color={occurrences > 1 ? colors.inkMuted : colors.rule} />
-                  </Pressable>
-                  <Text style={styles.stepValue}>{occurrences}</Text>
-                  <Pressable
-                    style={styles.stepButton}
-                    onPress={() => setOccurrences((value) => Math.min(600, value + 1))}
-                  >
-                    <StepPlus />
-                  </Pressable>
-                </View>
-              </View>
+              <Stepper
+                label="quantas vezes"
+                value={occurrences}
+                min={1}
+                max={MAX_OCCURRENCES}
+                onChange={setOccurrences}
+              />
             ) : null}
 
             {ending === 'date' ? (
-              <Field label="a última em">
-                <View style={styles.dateRow}>
-                  <Text style={[type.field, tabular]}>
-                    {fullDate(addMonths(today, BATCH_WINDOW_MONTHS))}
-                  </Text>
-                  <ChevronDown size={9} />
-                </View>
-              </Field>
+              <DateField label="a última em" value={endDate} onChange={setEndDate} />
             ) : null}
 
             <Text style={styles.batchNote}>
               as ocorrências são geradas em lote na hora, até{' '}
-              {monthYear(addMonths(today, BATCH_WINDOW_MONTHS))}. as seguintes entram sozinhas
+              {monthYear(shiftIso(start, BATCH_WINDOW_MONTHS))}. as seguintes entram sozinhas
               conforme o tempo passa.
             </Text>
           </View>
@@ -216,13 +255,59 @@ export default function NewTransactionScreen() {
 
       <View style={styles.spacer} />
 
+      <View style={styles.errorSlot}>
+        <InlineError error={failure} />
+      </View>
+
       <Actions
         primaryLabel="lançar"
-        onPrimary={() => router.back()}
+        onPrimary={submit}
+        busy={busy}
+        disabled={!ready}
         secondaryLabel="descartar"
         onSecondary={() => router.back()}
       />
+
+      <PickerSheet
+        visible={endingOpen}
+        title="até quando"
+        options={[
+          { value: 'open' as Ending, label: ENDING_LABELS.open },
+          { value: 'date' as Ending, label: ENDING_LABELS.date },
+          { value: 'count' as Ending, label: ENDING_LABELS.count },
+        ]}
+        value={ending}
+        onSelect={setEnding}
+        onClose={() => setEndingOpen(false)}
+      />
     </Screen>
+  );
+}
+
+interface StepperProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+  caption?: string;
+}
+
+function Stepper({ label, value, min, max, onChange, caption }: StepperProps) {
+  return (
+    <View style={styles.stepperBlock}>
+      <Text style={type.label}>{label}</Text>
+      <View style={styles.stepper}>
+        <Pressable style={styles.stepButton} onPress={() => onChange(Math.max(min, value - 1))}>
+          <StepMinus color={value > min ? colors.inkMuted : colors.rule} />
+        </Pressable>
+        <Text style={styles.stepValue}>{value}</Text>
+        <Pressable style={styles.stepButton} onPress={() => onChange(Math.min(max, value + 1))}>
+          <StepPlus color={value < max ? colors.inkMuted : colors.rule} />
+        </Pressable>
+      </View>
+      {caption ? <Text style={type.caption}>{caption}</Text> : null}
+    </View>
   );
 }
 
@@ -246,12 +331,11 @@ const styles = StyleSheet.create({
   chipActive: { borderColor: colors.rule, backgroundColor: colors.paperRaised },
   chipLabel: { fontFamily: fonts.sans, fontSize: 14, color: colors.inkFaint },
   chipLabelActive: { color: colors.ink },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   divider: { marginTop: 30 },
   repeatBlock: { marginTop: 20, gap: 8 },
   repeatDetail: { marginTop: 14, gap: 24 },
   stepperBlock: { gap: 6, alignSelf: 'flex-start' },
-  endingBlock: { gap: 2 },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -281,4 +365,5 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
   },
   spacer: { flexGrow: 1, minHeight: 30 },
+  errorSlot: { marginBottom: 12 },
 });

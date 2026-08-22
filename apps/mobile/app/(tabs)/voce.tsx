@@ -1,21 +1,30 @@
-import { Link, useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCategories, useTags } from '@/api/queries';
 import { Screen } from '@/components/Screen';
 import { WavyRule } from '@/components/WavyRule';
 import { ChevronRight } from '@/components/icons';
-import { authUser, categories, tags } from '@/mock/data';
+import { useAuth } from '@/auth/AuthContext';
 import { colors, fonts, space, type } from '@/theme/tokens';
 
 export default function ProfileScreen() {
-  const router = useRouter();
+  const { user, signOut } = useAuth();
+  const categories = useCategories();
+  const tags = useTags();
+
+  const categoryDetail = categories.data
+    ? `${categories.data.length} — ${categories.data.filter((item) => item.type === 'INCOME').length} de entrada, ${categories.data.filter((item) => item.type === 'EXPENSE').length} de saída`
+    : 'contando';
+
+  const tagDetail = tags.data ? `${tags.data.length} escritas até agora` : 'contando';
 
   return (
     <Screen scroll contentStyle={styles.content}>
       <Text style={type.title}>você</Text>
 
       <View style={styles.identity}>
-        <Text style={styles.name}>{authUser.name ?? authUser.email}</Text>
-        {authUser.name ? <Text style={styles.email}>{authUser.email}</Text> : null}
+        <Text style={styles.name}>{user?.name ?? user?.email ?? ''}</Text>
+        {user?.name ? <Text style={styles.email}>{user.email}</Text> : null}
       </View>
 
       <View style={styles.rule}>
@@ -23,12 +32,8 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.links}>
-        <NavLink
-          href="/categorias"
-          label="categorias"
-          detail={`${categories.length} — ${categories.filter((c) => c.type === 'INCOME').length} de entrada, ${categories.filter((c) => c.type === 'EXPENSE').length} de saída`}
-        />
-        <NavLink href="/etiquetas" label="etiquetas" detail={`${tags.length} escritas até agora`} />
+        <NavLink href="/categorias" label="categorias" detail={categoryDetail} />
+        <NavLink href="/etiquetas" label="etiquetas" detail={tagDetail} />
       </View>
 
       <View style={styles.spacer} />
@@ -37,7 +42,7 @@ export default function ProfileScreen() {
         seus lançamentos ficam no seu servidor. nada aqui conversa com banco ou cartão.
       </Text>
 
-      <Pressable style={styles.signOut} onPress={() => router.replace('/entrar')}>
+      <Pressable style={styles.signOut} onPress={() => void signOut()}>
         <Text style={styles.signOutLabel}>sair desta conta</Text>
       </Pressable>
     </Screen>

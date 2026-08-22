@@ -121,3 +121,84 @@ export interface AuthResult {
   user: AuthUser;
   token: string;
 }
+
+export interface TransactionInputBase {
+  categoryId: string;
+  type: TransactionType;
+  amount: number;
+  description?: string;
+  tagNames?: string[];
+}
+
+export interface CreateTransactionInput extends TransactionInputBase {
+  date: IsoDate;
+}
+
+export interface CreateRecurringInput extends TransactionInputBase {
+  startDate: IsoDate;
+  intervalMonths: number;
+  endDate?: IsoDate;
+  occurrences?: number;
+}
+
+export interface CreateInstallmentInput extends TransactionInputBase {
+  startDate: IsoDate;
+  installmentTotal: number;
+}
+
+export interface UpdateTransactionInput {
+  categoryId?: string;
+  amount?: number;
+  description?: string;
+  date?: IsoDate;
+  tagNames?: string[];
+}
+
+export interface UpdateRecurrenceInput {
+  categoryId?: string;
+  amount?: number;
+  description?: string;
+  intervalMonths?: number;
+  endDate?: IsoDate | null;
+  occurrences?: number | null;
+}
+
+export interface RecurrenceWithOccurrences {
+  recurrence: Recurrence;
+  transactions: Transaction[];
+}
+
+export interface CreateCategoryInput {
+  name: string;
+  type: TransactionType;
+  color?: string;
+}
+
+export interface UpdateCategoryInput {
+  name?: string;
+  color?: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface RegisterInput extends LoginInput {
+  name?: string;
+}
+
+export interface TransactionFilters {
+  dateFrom?: IsoDate;
+  dateTo?: IsoDate;
+  categoryId?: string;
+  type?: TransactionType;
+  tag?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface DashboardRange {
+  dateFrom?: IsoDate;
+  dateTo?: IsoDate;
+}

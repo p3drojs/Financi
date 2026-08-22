@@ -1,22 +1,54 @@
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Actions } from '@/components/Actions';
 import { Screen } from '@/components/Screen';
+import { InlineError } from '@/components/States';
 import { TextField } from '@/components/TextField';
 import { WavyRule } from '@/components/WavyRule';
+import { useAuth } from '@/auth/AuthContext';
 import { colors, fonts, space, type } from '@/theme/tokens';
 
 const MIN_PASSWORD = 8;
 
 export default function SignInScreen() {
-  const router = useRouter();
+  const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
 
   const registering = mode === 'register';
+  const complete =
+    email.trim().length > 0 &&
+    password.length >= (registering ? MIN_PASSWORD : 1);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+
+    try {
+      if (registering) {
+        await signUp({
+          email: email.trim(),
+          password,
+          ...(name.trim() ? { name: name.trim() } : {}),
+        });
+      } else {
+        await signIn({ email: email.trim(), password });
+      }
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const switchMode = () => {
+    setMode(registering ? 'login' : 'register');
+    setError(null);
+  };
 
   return (
     <Screen scroll contentStyle={styles.content}>
@@ -67,6 +99,10 @@ export default function SignInScreen() {
 
       <View style={styles.spacer} />
 
+      <View style={styles.errorSlot}>
+        <InlineError error={error} />
+      </View>
+
       {registering ? (
         <Text style={styles.seedNote}>
           ao criar a conta você já ganha as 13 categorias padrão — dá para renomear, trocar a cor
@@ -76,13 +112,12 @@ export default function SignInScreen() {
 
       <Actions
         primaryLabel={registering ? 'criar a conta' : 'entrar'}
-        onPrimary={() => router.replace('/')}
+        onPrimary={submit}
+        busy={busy}
+        disabled={!complete}
       />
 
-      <Pressable
-        style={styles.toggle}
-        onPress={() => setMode(registering ? 'login' : 'register')}
-      >
+      <Pressable style={styles.toggle} onPress={switchMode} disabled={busy}>
         <Text style={styles.toggleLabel}>
           {registering ? 'já tenho conta' : 'ainda não tenho conta'}
         </Text>
@@ -104,6 +139,7 @@ const styles = StyleSheet.create({
   rule: { marginTop: 34 },
   fields: { marginTop: 34, gap: 28 },
   spacer: { flexGrow: 1, minHeight: 40 },
+  errorSlot: { marginBottom: 14 },
   seedNote: {
     fontFamily: fonts.sans,
     fontSize: 12,
