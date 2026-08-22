@@ -1,24 +1,48 @@
+import { useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
-import { Transaction } from '@/api/types';
+import { useInstallmentGroup } from '@/api/queries';
+import { InstallmentGroup, Transaction } from '@/api/types';
 import { BackHeader } from '@/components/BackHeader';
 import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
+import { ErrorState, Loading } from '@/components/States';
 import { Stroke } from '@/components/Stroke';
 import { WavyRule } from '@/components/WavyRule';
 import { fullDate, money, ordinal } from '@/lib/format';
-import { installmentGroup } from '@/mock/data';
 import { onPaper } from '@/theme/categoryColors';
 import { colors, fonts, tabular, type } from '@/theme/tokens';
 
 export default function InstallmentGroupScreen() {
-  const group = installmentGroup;
+  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const query = useInstallmentGroup(groupId);
+
+  return (
+    <Screen scroll contentStyle={styles.content}>
+      {query.isPending ? (
+        <>
+          <BackHeader title="parcelamento" compact />
+          <Loading label="somando as parcelas" />
+        </>
+      ) : query.error ? (
+        <>
+          <BackHeader title="parcelamento" compact />
+          <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+        </>
+      ) : query.data ? (
+        <GroupBody group={query.data} />
+      ) : null}
+    </Screen>
+  );
+}
+
+function GroupBody({ group }: { group: InstallmentGroup }) {
   const color = onPaper(group.category.color);
   const tags = group.transactions[0]?.tags ?? [];
   const nextNumber = group.paidCount + 1;
   const regularAmount = group.transactions[0]?.amount;
 
   return (
-    <Screen scroll contentStyle={styles.content}>
+    <>
       <BackHeader title={group.description ?? 'parcelamento'} compact />
 
       <View style={styles.meta}>
@@ -54,6 +78,7 @@ export default function InstallmentGroupScreen() {
           {group.paidCount} de {group.installmentTotal} já venceram
         </Text>
         <Text style={type.caption}>contadas pela data — não dá para marcar uma como paga</Text>
+        <Text style={styles.remaining}>faltam R$ {money(group.remainingAmount)}</Text>
       </View>
 
       <View style={styles.divider}>
@@ -71,7 +96,7 @@ export default function InstallmentGroupScreen() {
           />
         ))}
       </View>
-    </Screen>
+    </>
   );
 }
 
@@ -87,7 +112,13 @@ function InstallmentRow({ item, paid, next, carriesRemainder }: RowProps) {
 
   return (
     <View style={styles.row}>
-      <Money style={[styles.number, paid ? styles.numberPaid : null, highlighted ? styles.numberActive : null]}>
+      <Money
+        style={[
+          styles.number,
+          paid ? styles.numberPaid : null,
+          highlighted ? styles.numberActive : null,
+        ]}
+      >
         {ordinal(item.installmentNumber ?? 0)}
       </Money>
 
@@ -130,10 +161,18 @@ const styles = StyleSheet.create({
     ...tabular,
   },
   totalSuffix: { fontFamily: fonts.sans, fontSize: 14, color: colors.inkFaint },
-  tally: { marginTop: 30, flexDirection: 'row', alignItems: 'flex-end', gap: 7, height: 24 },
+  tally: {
+    marginTop: 30,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 7,
+    height: 24,
+    flexWrap: 'wrap',
+  },
   tallyMark: { width: 2, height: 20, borderRadius: 1, transform: [{ rotate: '-8deg' }] },
   progress: { marginTop: 12, gap: 3 },
   progressLabel: { fontFamily: fonts.sans, fontSize: 14, color: colors.ink },
+  remaining: { fontFamily: fonts.sans, fontSize: 12, color: colors.inkFaint, marginTop: 4 },
   divider: { marginTop: 22 },
   rows: { marginTop: 10 },
   row: { height: 42, flexDirection: 'row', alignItems: 'center', gap: 16 },
