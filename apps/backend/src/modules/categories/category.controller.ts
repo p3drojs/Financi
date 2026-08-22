@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
-import { TransactionType } from '@prisma/client';
 import * as categoryService from './category.service';
+import { ListCategoriesQuery } from './category.schema';
 
 export async function createCategoryHandler(
   req: Request,
@@ -21,8 +21,10 @@ export async function listCategoriesHandler(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const type = req.query.type as TransactionType | undefined;
-    const categories = await categoryService.listCategories(req.userId as string, type);
+    const categories = await categoryService.listCategories(
+      req.userId as string,
+      req.query as unknown as ListCategoriesQuery,
+    );
     res.status(200).json(categories);
   } catch (err) {
     next(err);

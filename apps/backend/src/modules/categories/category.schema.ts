@@ -33,8 +33,13 @@ export const categoryIdParamSchema = z.object({
 export const listCategoriesSchema = z.object({
   query: z.object({
     type: z.enum(['INCOME', 'EXPENSE']).optional(),
+    includeSystem: z
+      .enum(['true', 'false'])
+      .optional()
+      .transform((value) => value === 'true'),
   }),
 });
 
+export type ListCategoriesQuery = z.infer<typeof listCategoriesSchema>['query'];
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>['body'];
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>['body'];
