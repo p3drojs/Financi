@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { addMonths } from '../transactions/recurrence.util';
+import { extendActiveRecurrences } from '../transactions/transaction.service';
 import { BalanceEvolutionQuery, ByCategoryQuery, SummaryQuery } from './dashboard.schema';
 
 function dateRangeWhere(dateFrom?: Date, dateTo?: Date) {
@@ -14,6 +15,8 @@ function dateRangeWhere(dateFrom?: Date, dateTo?: Date) {
 }
 
 export async function getSummary(userId: string, query: SummaryQuery) {
+  await extendActiveRecurrences(userId);
+
   const grouped = await prisma.transaction.groupBy({
     by: ['type'],
     where: { userId, ...dateRangeWhere(query.dateFrom, query.dateTo) },
@@ -33,6 +36,8 @@ export async function getSummary(userId: string, query: SummaryQuery) {
 }
 
 export async function getByCategory(userId: string, query: ByCategoryQuery) {
+  await extendActiveRecurrences(userId);
+
   const grouped = await prisma.transaction.groupBy({
     by: ['categoryId'],
     where: {
@@ -61,6 +66,8 @@ export async function getByCategory(userId: string, query: ByCategoryQuery) {
 }
 
 export async function getBalanceEvolution(userId: string, query: BalanceEvolutionQuery) {
+  await extendActiveRecurrences(userId);
+
   const now = new Date();
   const rangeStart = addMonths(new Date(now.getFullYear(), now.getMonth(), 1), -(query.months - 1));
 
