@@ -86,7 +86,7 @@ describe('Categories (e2e)', () => {
   it('rejeita renomear para um nome já usado no mesmo tipo', async () => {
     const { token } = await registerUser(app);
     await createCategory(app, token, { name: 'Farmácia', type: 'EXPENSE' });
-    const outra = await createCategory(app, token, { name: 'Transporte', type: 'EXPENSE' });
+    const outra = await createCategory(app, token, { name: 'Padaria', type: 'EXPENSE' });
 
     const res = await request(app)
       .patch(`/categories/${outra.id}`)
