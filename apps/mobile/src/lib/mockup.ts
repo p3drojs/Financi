@@ -207,3 +207,53 @@ export function goalById(id: string): MockGoal {
 export function accountById(id: string): MockAccount {
   return ACCOUNTS.find((account) => account.id === id) ?? (ACCOUNTS[0] as MockAccount);
 }
+
+export interface MockMovement {
+  id: string;
+  date: string;
+  name: string;
+  category: string | null;
+  color: string | null;
+  amount: number;
+  transfer?: boolean;
+  installment?: string;
+  note?: string;
+}
+
+export const MOVEMENTS: MockMovement[] = [
+  {
+    id: 'mercado',
+    date: '21/08',
+    name: 'Mercado Zona Sul',
+    category: 'Alimentação',
+    color: '#FF9A4D',
+    amount: -312.84,
+  },
+  {
+    id: 'notebook',
+    date: '05/08',
+    name: 'Notebook',
+    category: 'Compras',
+    color: '#F9C063',
+    amount: -220.5,
+    installment: '3/12',
+  },
+  {
+    id: 'transferencia',
+    date: '02/08',
+    name: 'veio do Nubank',
+    category: null,
+    color: null,
+    amount: 900,
+    transfer: true,
+    note: 'não conta como entrada',
+  },
+  {
+    id: 'posto',
+    date: '28/07',
+    name: 'Posto Shell',
+    category: 'Transporte',
+    color: '#57ACE8',
+    amount: -178.16,
+  },
+];
