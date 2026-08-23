@@ -76,17 +76,15 @@ não reabra essa decisão.
 
 ### Estado real, hoje
 
-A **onda 0 já está em produção**. Ela criou as tabelas e a conta padrão, mas **não expôs
-nenhum endpoint novo** — do ponto de vista do app, nada mudou ainda. Duas mudanças silenciosas
-que já valem:
+**Reconciliado em 23/08/2026, depois das ondas 1 e 2.** Tudo que este documento descreve
+abaixo **existe e responde** — os endpoints foram implementados e a referência final é o
+`apps/backend/openapi.yaml`, não este texto. Duas coisas que já valiam desde a onda 0:
 
 - todo usuário tem uma conta chamada **"Carteira"**, e todo lançamento pertence a uma conta;
 - existe uma categoria de sistema **"Transferência"** que o `GET /categories` **esconde**. Se
   algum dia você precisar dela, é `?includeSystem=true`. Ela nunca aparece no grid de escolher
-  categoria.
-
-Tudo abaixo é **contrato desenhado, ainda não implementado**. Você não consegue chamar esses
-endpoints hoje — desenhe contra o contrato, não contra o servidor.
+  categoria. Usuário criado antes da onda 0 só ganha essa categoria na primeira transferência —
+  ela é criada na hora, sem erro.
 
 ### 3.1 Contas / carteiras
 
@@ -147,8 +145,15 @@ Isso divide o extrato em dois mundos que hoje não existem: **o que aconteceu** 
 marcado para acontecer**. O desenho anterior já previa: pendente com opacidade menor e um
 ponto vazado; vencido com o traço em `colors.brick`. Confirme se isso ainda serve.
 
-`GET /dashboard/summary` ganha `committedBalance` (tudo do período) ao lado do `balance`
-(só o pago). Os campos atuais não mudam de nome.
+**Corrigido na reconciliação:** o `committedBalance` que este brief prometia em
+`GET /dashboard/summary` **não existe, e não deveria existir** — a premissa estava errada. O
+`balance` do summary nunca filtrou por `paid`: ele já é "tudo lançado no período, pago ou não".
+Acrescentar um `committedBalance` seria duplicar o mesmo número. O contrato do summary segue
+exatamente igual ao de antes da fase 2 (`totalIncome`, `totalExpense`, `balance`), e há um teste
+travando isso.
+
+O número "só o que já saiu de verdade" que a tela precisa é o `currentBalance` do
+`GET /dashboard/forecast`, ou o `balance` de cada conta em `GET /accounts`.
 
 > **Pegadinha com os dados reais do autor.** O que já existia no banco antes da fase 2 ficou
 > todo marcado como pago, incluindo ocorrências futuras — o autor dispensou a correção porque
@@ -181,6 +186,12 @@ número num card, a feature se perde. Quando `lowestPoint.balance < 0`, é alert
 `daily` é uma série pronta para uma sparkline. `truncated: true` significa que a previsão não
 alcança a data pedida — o app precisa dizer "previsão até tal dia" em vez de mentir.
 
+**Reconciliado:** a resposta traz também `asOf` e `until` (ambos `YYYY-MM-DD`), e o último
+ponto de `daily` sempre bate com `projectedBalance` — há teste travando isso. O
+`currentBalance` conta transferência (é saldo), mas `pendingIncome`, `pendingExpense` e o
+`daily` não contam. Lançamento pendente com data de **hoje** entra em `upcoming`, não em
+`overdue`.
+
 ### 3.5 Orçamento por categoria
 
 Um teto por categoria, por mês. Só categorias de saída, nunca de sistema.
@@ -209,7 +220,7 @@ anterior é o gesto equivalente, e precisa de um lugar óbvio na interface.
 ```
 GET/POST      /goals
 GET/PATCH/DELETE  /goals/:id
-POST          /goals/:id/contributions      { amount, date, fromAccountId? }
+POST          /goals/:id/contributions      { amount, date, fromAccountId?, transactionId? }
 DELETE        /goals/:id/contributions/:contributionId
 ```
 
@@ -218,6 +229,13 @@ Meta tem alvo, data-alvo opcional e **conta opcional**. Essa opcionalidade é a 
 - **meta com conta** (tipo poupança): o aporte move dinheiro de verdade, via transferência. O
   dinheiro aparece no saldo daquela conta;
 - **meta sem conta**: o aporte é só escrituração, para acompanhar algo que mora fora do app.
+
+Como ficou implementado: só há transferência quando a meta tem `accountId` **e** a requisição
+manda `fromAccountId`. Qualquer outra combinação grava só a contribuição, sem erro. Mandar
+`fromAccountId` numa meta sem conta é 400. E **apagar um aporte que gerou transferência apaga
+as duas pontas dela** — senão sobraria dinheiro parado na conta-cofre sem nada explicando de
+onde veio. Se você preferir manter o lançamento e só desvincular, é trocar isso em
+`removeContribution`.
 
 São duas experiências diferentes e o app precisa deixar claro qual está em jogo — senão o
 usuário acha que guardou dinheiro que não saiu do lugar.
