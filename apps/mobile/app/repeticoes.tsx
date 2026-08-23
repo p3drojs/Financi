@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useCancelRecurrence, useRecurrences } from '@/api/queries';
 import { RecurrenceListItem } from '@/api/types';
+import { BackHeader } from '@/components/BackHeader';
 import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
 import { EmptyState, ErrorState, InlineError, Loading } from '@/components/States';
@@ -11,7 +12,7 @@ import { RepeatIcon } from '@/components/icons';
 import { monthYear, signedMoney } from '@/lib/format';
 import { batchHorizon, recurrenceLine } from '@/lib/recurrence';
 import { onPaper } from '@/theme/categoryColors';
-import { colors, fonts, space, tabular, type } from '@/theme/tokens';
+import { colors, fonts, space, tabular } from '@/theme/tokens';
 
 export default function RecurrencesScreen() {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export default function RecurrencesScreen() {
   return (
     <Screen scroll gutter={false} contentStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={type.title}>repetições</Text>
+        <BackHeader title="o que se repete" />
         <Text style={styles.count}>
           {query.isPending ? 'contando' : `${active.length} ativas`}
         </Text>
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: space.gutter,
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
   count: { fontFamily: fonts.sans, fontSize: 12, color: colors.inkFaint },
