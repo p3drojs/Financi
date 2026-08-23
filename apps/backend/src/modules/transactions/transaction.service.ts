@@ -10,6 +10,7 @@ import {
   summarizeInstallments,
 } from './installment.util';
 import { generateRecurrenceDates, pendingRecurrenceDates } from './recurrence.util';
+import { transactionInclude } from './transaction.include';
 import {
   CreateInstallmentTransactionInput,
   CreateRecurringTransactionInput,
@@ -20,10 +21,7 @@ import {
   UpdateTransactionInput,
 } from './transaction.schema';
 
-const transactionInclude = {
-  category: true,
-  tags: { include: { tag: true } },
-};
+export { transactionInclude };
 
 async function assertCategoryMatches(userId: string, categoryId: string, type: string) {
   const category = await prisma.category.findFirst({ where: { id: categoryId, userId } });
