@@ -184,3 +184,30 @@ describe('Pago / não pago (e2e)', () => {
     expect(empty.body.total).toBe(0);
   });
 });
+
+describe('A pagar e transferência (e2e)', () => {
+  it('não coloca transferência pendente no a pagar', async () => {
+    const { token, accountId } = await registerUser(app);
+    const destination = await request(app)
+      .post('/accounts')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Reserva', kind: 'SAVINGS' });
+
+    await request(app)
+      .post('/accounts/transfers')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        fromAccountId: accountId,
+        toAccountId: destination.body.id,
+        amount: 250,
+        date: daysFromNow(3),
+      });
+
+    const res = await request(app)
+      .get('/transactions/upcoming')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.body.upcoming.items).toHaveLength(0);
+    expect(Number(res.body.upcoming.total)).toBe(0);
+  });
+});

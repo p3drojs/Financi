@@ -9,6 +9,7 @@ import {
   splitInstallments,
   summarizeInstallments,
 } from './installment.util';
+import { ledgerWhere } from './ledger';
 import { generateRecurrenceDates, pendingRecurrenceDates } from './recurrence.util';
 import { transactionInclude } from './transaction.include';
 import { resolvePaid, startOfUtcDay } from './transaction.util';
@@ -346,7 +347,7 @@ export async function getUpcoming(userId: string, days: number) {
   const horizon = new Date(today.getTime() + days * MILLIS_PER_DAY);
 
   const pending = await prisma.transaction.findMany({
-    where: { userId, paid: false, date: { lte: horizon } },
+    where: { userId, ...ledgerWhere, paid: false, date: { lte: horizon } },
     include: transactionInclude,
     orderBy: { date: 'asc' },
   });
