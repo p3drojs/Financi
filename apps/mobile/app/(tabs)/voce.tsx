@@ -32,6 +32,7 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.links}>
+        <NavLink href="/contas" label="onde o dinheiro está" detail="maquete" />
         <NavLink href="/categorias" label="categorias" detail={categoryDetail} />
         <NavLink href="/etiquetas" label="etiquetas" detail={tagDetail} />
       </View>
