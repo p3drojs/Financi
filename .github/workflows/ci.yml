@@ -3,7 +3,6 @@ name: CI Backend
 on:
   push:
     branches: ["**"]
-  pull_request:
   workflow_dispatch:
 
 defaults:
@@ -96,8 +95,12 @@ jobs:
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: test-and-analyze
+    defaults:
+      run:
+        shell: bash
+        working-directory: .
     steps:
       - name: Disparar deploy no Render
         run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
