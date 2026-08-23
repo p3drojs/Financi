@@ -6,6 +6,7 @@ const baseFields = {
   amount: z.number().positive(),
   description: z.string().max(280).optional(),
   tagNames: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  paid: z.boolean().optional(),
 };
 
 export const createTransactionSchema = z.object({
@@ -40,6 +41,7 @@ export const updateTransactionSchema = z.object({
     description: z.string().max(280).optional(),
     date: z.coerce.date().optional(),
     tagNames: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+    paid: z.boolean().optional(),
   }),
   params: z.object({
     id: z.string().uuid(),
@@ -90,6 +92,18 @@ export const listTransactionsSchema = z.object({
   }),
 });
 
+export const payTransactionsSchema = z.object({
+  body: z.object({
+    ids: z.array(z.string().uuid()).min(1).max(200),
+  }),
+});
+
+export const upcomingTransactionsSchema = z.object({
+  query: z.object({
+    days: z.coerce.number().int().min(1).max(90).default(7),
+  }),
+});
+
 export const listRecurrencesSchema = z.object({
   query: z.object({
     active: z
@@ -109,4 +123,6 @@ export type CreateInstallmentTransactionInput = z.infer<
 export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>['body'];
 export type UpdateRecurrenceInput = z.infer<typeof updateRecurrenceSchema>['body'];
 export type ListTransactionsQuery = z.infer<typeof listTransactionsSchema>['query'];
+export type PayTransactionsInput = z.infer<typeof payTransactionsSchema>['body'];
+export type UpcomingTransactionsQuery = z.infer<typeof upcomingTransactionsSchema>['query'];
 export type ListRecurrencesQuery = z.infer<typeof listRecurrencesSchema>['query'];

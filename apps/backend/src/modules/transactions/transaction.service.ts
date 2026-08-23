@@ -11,6 +11,7 @@ import {
 } from './installment.util';
 import { generateRecurrenceDates, pendingRecurrenceDates } from './recurrence.util';
 import { transactionInclude } from './transaction.include';
+import { resolvePaid, startOfUtcDay } from './transaction.util';
 import {
   CreateInstallmentTransactionInput,
   CreateRecurringTransactionInput,
@@ -22,6 +23,12 @@ import {
 } from './transaction.schema';
 
 export { transactionInclude };
+
+const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function sumAmounts(items: { amount: Prisma.Decimal }[]): Prisma.Decimal {
+  return items.reduce((total, item) => total.plus(item.amount), new Prisma.Decimal(0));
+}
 
 async function assertCategoryMatches(userId: string, categoryId: string, type: string) {
   const category = await prisma.category.findFirst({ where: { id: categoryId, userId } });
@@ -71,6 +78,7 @@ async function extendRecurrenceBatch(recurrence: Recurrence, now: Date): Promise
           amount: recurrence.amount,
           description: recurrence.description,
           date,
+          ...resolvePaid(date),
           recurrenceId: recurrence.id,
           tags: { create: tagIds.map((tagId) => ({ tagId })) },
         },
@@ -105,6 +113,7 @@ export async function createTransaction(userId: string, input: CreateTransaction
       amount: input.amount,
       description: input.description,
       date: input.date,
+      ...resolvePaid(input.date, input.paid),
       tags: { create: tags.map((tag) => ({ tagId: tag.id })) },
     },
     include: transactionInclude,
@@ -152,6 +161,7 @@ export async function createRecurringTransaction(
             amount: input.amount,
             description: input.description,
             date,
+            ...resolvePaid(date, input.paid),
             recurrenceId: recurrence.id,
             tags: { create: tags.map((tag) => ({ tagId: tag.id })) },
           },
@@ -187,6 +197,7 @@ export async function createInstallmentTransaction(
           amount: amounts[index] as Prisma.Decimal,
           description: input.description,
           date,
+          ...resolvePaid(date, input.paid),
           installmentGroupId,
           installmentNumber: index + 1,
           installmentTotal: input.installmentTotal,
@@ -292,9 +303,43 @@ export async function updateTransaction(userId: string, id: string, input: Updat
       amount: input.amount,
       description: input.description,
       date: input.date,
+      ...(input.paid === undefined
+        ? {}
+        : { paid: input.paid, paidAt: input.paid ? new Date() : null }),
     },
     include: transactionInclude,
   });
+}
+
+export async function payTransactions(userId: string, ids: string[]) {
+  const result = await prisma.transaction.updateMany({
+    where: { userId, id: { in: ids }, paid: false },
+    data: { paid: true, paidAt: new Date() },
+  });
+
+  return { updated: result.count };
+}
+
+export async function getUpcoming(userId: string, days: number) {
+  await extendActiveRecurrences(userId);
+
+  const now = new Date();
+  const today = startOfUtcDay(now);
+  const horizon = new Date(today.getTime() + days * MILLIS_PER_DAY);
+
+  const pending = await prisma.transaction.findMany({
+    where: { userId, paid: false, date: { lte: horizon } },
+    include: transactionInclude,
+    orderBy: { date: 'asc' },
+  });
+
+  const overdue = pending.filter((transaction) => transaction.date < today);
+  const upcoming = pending.filter((transaction) => transaction.date >= today);
+
+  return {
+    overdue: { total: sumAmounts(overdue), items: overdue },
+    upcoming: { total: sumAmounts(upcoming), items: upcoming },
+  };
 }
 
 export async function deleteTransaction(userId: string, id: string) {
@@ -385,6 +430,7 @@ async function rescheduleFutureOccurrences(recurrence: Recurrence, now: Date) {
           amount: recurrence.amount,
           description: recurrence.description,
           date,
+          ...resolvePaid(date),
           recurrenceId: recurrence.id,
           tags: { create: tagIds.map((tagId) => ({ tagId })) },
         },
