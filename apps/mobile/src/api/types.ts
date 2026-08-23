@@ -38,6 +38,10 @@ export interface Transaction {
   installmentGroupId: string | null;
   installmentNumber: number | null;
   installmentTotal: number | null;
+  accountId: string;
+  transferGroupId: string | null;
+  paid: boolean;
+  paidAt: IsoDate | null;
   createdAt: IsoDate;
   updatedAt: IsoDate;
   category: Category;
@@ -191,6 +195,7 @@ export interface RegisterInput extends LoginInput {
 
 export interface TransactionFilters {
   dateFrom?: IsoDate;
+  accountId?: string;
   dateTo?: IsoDate;
   categoryId?: string;
   type?: TransactionType;
@@ -202,4 +207,169 @@ export interface TransactionFilters {
 export interface DashboardRange {
   dateFrom?: IsoDate;
   dateTo?: IsoDate;
+  accountId?: string;
+}
+
+export type AccountKind = 'CHECKING' | 'SAVINGS' | 'CASH' | 'CREDIT_CARD' | 'INVESTMENT';
+
+export interface Account {
+  id: string;
+  userId: string;
+  name: string;
+  kind: AccountKind;
+  color: string | null;
+  initialBalance: Money;
+  archived: boolean;
+  balance: Money;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface AccountDetail extends Account {
+  transactions: Transaction[];
+}
+
+export interface CreateAccountInput {
+  name: string;
+  kind: AccountKind;
+  color?: string;
+  initialBalance?: number;
+}
+
+export interface UpdateAccountInput {
+  name?: string;
+  color?: string | null;
+  initialBalance?: number;
+  archived?: boolean;
+}
+
+export interface CreateTransferInput {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date: IsoDate;
+  description?: string;
+}
+
+export interface Transfer {
+  transferGroupId: string;
+  from: Transaction;
+  to: Transaction;
+}
+
+export interface UpcomingBucket {
+  total: Money;
+  items: Transaction[];
+}
+
+export interface UpcomingResponse {
+  overdue: UpcomingBucket;
+  upcoming: UpcomingBucket;
+}
+
+export interface ForecastPoint {
+  date: string;
+  balance: Money;
+}
+
+export interface Forecast {
+  asOf: string;
+  until: string;
+  currentBalance: Money;
+  pendingIncome: Money;
+  pendingExpense: Money;
+  overdue: { count: number; total: Money };
+  projectedBalance: Money;
+  lowestPoint: ForecastPoint | null;
+  daily: ForecastPoint[];
+  truncated: boolean;
+}
+
+export type BudgetStatus = 'OK' | 'WARNING' | 'OVER';
+
+export interface BudgetItem {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  color: string | null;
+  amount: Money;
+  spent: Money;
+  committed: Money;
+  remaining: Money;
+  percent: number;
+  status: BudgetStatus;
+}
+
+export interface BudgetEnvelope {
+  month: string;
+  totalBudgeted: Money;
+  totalSpent: Money;
+  totalCommitted: Money;
+  items: BudgetItem[];
+}
+
+export interface CreateBudgetInput {
+  categoryId: string;
+  month: string;
+  amount: number;
+}
+
+export interface CopyBudgetInput {
+  fromMonth: string;
+  toMonth: string;
+}
+
+export interface GoalContribution {
+  id: string;
+  goalId: string;
+  amount: Money;
+  date: IsoDate;
+  transactionId: string | null;
+  createdAt: IsoDate;
+}
+
+export interface Goal {
+  id: string;
+  userId: string;
+  name: string;
+  targetAmount: Money;
+  targetDate: IsoDate | null;
+  accountId: string | null;
+  color: string | null;
+  archived: boolean;
+  achievedAt: IsoDate | null;
+  contributions: GoalContribution[];
+  saved: Money;
+  progress: number | null;
+  remaining: Money;
+  requiredMonthly: Money | null;
+  pace: Money | null;
+  projectedDate: IsoDate | null;
+  onTrack: boolean | null;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface CreateGoalInput {
+  name: string;
+  targetAmount: number;
+  targetDate?: IsoDate;
+  accountId?: string;
+  color?: string;
+}
+
+export interface UpdateGoalInput {
+  name?: string;
+  targetAmount?: number;
+  targetDate?: IsoDate | null;
+  accountId?: string | null;
+  color?: string | null;
+  archived?: boolean;
+}
+
+export interface CreateContributionInput {
+  amount: number;
+  date: IsoDate;
+  transactionId?: string;
+  fromAccountId?: string;
 }
