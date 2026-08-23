@@ -20,6 +20,12 @@ tags:
     description: Transações, recorrências e parcelamentos
   - name: Dashboard
     description: Agregações e relatórios
+  - name: Accounts
+    description: Contas, saldos e transferencias
+  - name: Budgets
+    description: Teto de gasto por categoria, mes a mes
+  - name: Goals
+    description: Metas de poupanca e aportes
 
 security:
   - bearerAuth: []
@@ -276,6 +282,9 @@ paths:
         - name: pageSize
           in: query
           schema: { type: integer, default: 50 }
+        - name: accountId
+          in: query
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Página de transações
@@ -495,6 +504,9 @@ paths:
         - name: dateTo
           in: query
           schema: { type: string, format: date-time }
+        - name: accountId
+          in: query
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Resumo financeiro
@@ -522,6 +534,9 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/TransactionType'
+        - name: accountId
+          in: query
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Totais por categoria
@@ -534,9 +549,395 @@ paths:
         - name: months
           in: query
           schema: { type: integer, default: 6 }
+        - name: accountId
+          in: query
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Série mensal de receita/despesa/saldo
+
+  /accounts:
+    get:
+      tags: [Accounts]
+      summary: Lista as contas com saldo calculado
+      parameters:
+        - name: includeArchived
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          description: Contas do usuário
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Account'
+    post:
+      tags: [Accounts]
+      summary: Cria uma conta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountInput'
+      responses:
+        '201':
+          description: Conta criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '409':
+          description: Já existe uma conta com esse nome
+
+  /accounts/transfers:
+    post:
+      tags: [Accounts]
+      summary: Move dinheiro entre duas contas
+      description: >
+        Cria duas transações irmãs ligadas por transferGroupId — uma EXPENSE na origem e uma
+        INCOME no destino, ambas na categoria de sistema "Transferência". Conta no saldo das
+        contas e nunca em agregado de receita/despesa.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransferInput'
+      responses:
+        '201':
+          description: Transferência criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+        '400':
+          description: Contas iguais, arquivadas ou valor inválido
+        '404':
+          description: Conta não encontrada
+
+  /accounts/transfers/{transferGroupId}:
+    delete:
+      tags: [Accounts]
+      summary: Apaga as duas pontas de uma transferência
+      parameters:
+        - name: transferGroupId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Transferência apagada
+        '404':
+          description: Transferência não encontrada
+
+  /accounts/{id}:
+    get:
+      tags: [Accounts]
+      summary: Conta, saldo e últimas 20 transações
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Conta encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetail'
+        '404':
+          description: Conta não encontrada
+    patch:
+      tags: [Accounts]
+      summary: Atualiza nome, cor, saldo inicial ou arquivamento
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAccountInput'
+      responses:
+        '200':
+          description: Conta atualizada
+        '409':
+          description: Já existe uma conta com esse nome
+    delete:
+      tags: [Accounts]
+      summary: Apaga uma conta sem lançamentos
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Conta apagada
+        '409':
+          description: A conta tem lançamentos — arquive em vez de apagar
+
+  /transactions/pay:
+    post:
+      tags: [Transactions]
+      summary: Marca lançamentos como pagos em lote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  maxItems: 200
+                  items: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Quantidade efetivamente marcada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated: { type: integer }
+
+  /transactions/upcoming:
+    get:
+      tags: [Transactions]
+      summary: O que venceu e o que vence na janela pedida
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 7, minimum: 1, maximum: 90 }
+      responses:
+        '200':
+          description: Vencidos e a vencer, já sem transferências
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpcomingResponse'
+
+  /dashboard/forecast:
+    get:
+      tags: [Dashboard]
+      summary: Projeta o saldo até uma data, com o ponto mais baixo do caminho
+      parameters:
+        - name: until
+          in: query
+          schema: { type: string, format: date }
+        - name: accountId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Previsão diária até a data pedida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Forecast'
+
+  /budgets:
+    get:
+      tags: [Budgets]
+      summary: Tetos do mês com o que já saiu e o que está prometido
+      parameters:
+        - name: month
+          in: query
+          schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+      responses:
+        '200':
+          description: Envelope do mês
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetEnvelope'
+    post:
+      tags: [Budgets]
+      summary: Cria um teto para uma categoria de saída
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBudgetInput'
+      responses:
+        '201':
+          description: Teto criado
+        '400':
+          description: Categoria de entrada, de sistema, ou mês fora do formato
+        '409':
+          description: Esta categoria já tem teto neste mês
+
+  /budgets/copy:
+    post:
+      tags: [Budgets]
+      summary: Copia os tetos de um mês para outro, pulando os que já existem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromMonth, toMonth]
+              properties:
+                fromMonth: { type: string, example: '2026-07' }
+                toMonth: { type: string, example: '2026-08' }
+      responses:
+        '201':
+          description: Quantos foram criados e quantos foram pulados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: integer }
+                  skipped: { type: integer }
+
+  /budgets/{id}:
+    patch:
+      tags: [Budgets]
+      summary: Muda o valor do teto
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: number }
+      responses:
+        '200':
+          description: Teto atualizado
+    delete:
+      tags: [Budgets]
+      summary: Apaga o teto
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Teto apagado
+
+  /goals:
+    get:
+      tags: [Goals]
+      summary: Lista as metas com progresso calculado
+      parameters:
+        - name: includeArchived
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          description: Metas do usuário
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Goal'
+    post:
+      tags: [Goals]
+      summary: Cria uma meta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGoalInput'
+      responses:
+        '201':
+          description: Meta criada
+        '400':
+          description: Data-alvo no passado
+        '409':
+          description: Já existe uma meta com esse nome
+
+  /goals/{id}:
+    get:
+      tags: [Goals]
+      summary: Meta com aportes e derivados
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200':
+          description: Meta encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '404':
+          description: Meta não encontrada
+    patch:
+      tags: [Goals]
+      summary: Atualiza a meta
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGoalInput'
+      responses:
+        '200':
+          description: Meta atualizada
+    delete:
+      tags: [Goals]
+      summary: Apaga a meta e seus aportes, preservando os lançamentos
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204':
+          description: Meta apagada
+
+  /goals/{id}/contributions:
+    post:
+      tags: [Goals]
+      summary: Registra um aporte
+      description: >
+        Com fromAccountId e meta que tenha accountId, o aporte cria uma transferência da conta
+        de origem para a conta da meta e guarda o vínculo. Sem fromAccountId, é só escrituração
+        e nenhuma conta se mexe.
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateContributionInput'
+      responses:
+        '201':
+          description: Meta com o aporte já somado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+        '400':
+          description: fromAccountId numa meta sem conta vinculada
+        '409':
+          description: Este lançamento já está ligado a um aporte
+
+  /goals/{id}/contributions/{contributionId}:
+    delete:
+      tags: [Goals]
+      summary: Apaga um aporte, desfazendo a transferência que o financiou
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+        - name: contributionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Meta recalculada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Goal'
+
 
 components:
   securitySchemes:
@@ -558,6 +959,239 @@ components:
     TransactionType:
       type: string
       enum: [INCOME, EXPENSE]
+
+
+    AccountKind:
+      type: string
+      enum: [CHECKING, SAVINGS, CASH, CREDIT_CARD, INVESTMENT]
+
+    Account:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        color: { type: string, nullable: true }
+        initialBalance: { type: string }
+        archived: { type: boolean }
+        balance:
+          type: string
+          description: initialBalance mais entradas pagas menos saídas pagas, só o que já venceu
+
+    AccountDetail:
+      allOf:
+        - $ref: '#/components/schemas/Account'
+        - type: object
+          properties:
+            transactions:
+              type: array
+              items:
+                $ref: '#/components/schemas/Transaction'
+
+    CreateAccountInput:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, maxLength: 60 }
+        kind:
+          $ref: '#/components/schemas/AccountKind'
+        color: { type: string }
+        initialBalance: { type: number }
+
+    UpdateAccountInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 60 }
+        color: { type: string, nullable: true }
+        initialBalance: { type: number }
+        archived: { type: boolean }
+
+    CreateTransferInput:
+      type: object
+      required: [fromAccountId, toAccountId, amount, date]
+      properties:
+        fromAccountId: { type: string, format: uuid }
+        toAccountId: { type: string, format: uuid }
+        amount: { type: number }
+        date: { type: string, format: date-time }
+        description: { type: string }
+
+    Transfer:
+      type: object
+      properties:
+        transferGroupId: { type: string, format: uuid }
+        from:
+          $ref: '#/components/schemas/Transaction'
+        to:
+          $ref: '#/components/schemas/Transaction'
+
+    UpcomingBucket:
+      type: object
+      properties:
+        total: { type: string }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+
+    UpcomingResponse:
+      type: object
+      properties:
+        overdue:
+          $ref: '#/components/schemas/UpcomingBucket'
+        upcoming:
+          $ref: '#/components/schemas/UpcomingBucket'
+
+    ForecastPoint:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        balance: { type: string }
+
+    Forecast:
+      type: object
+      properties:
+        asOf: { type: string, format: date }
+        until: { type: string, format: date }
+        currentBalance: { type: string }
+        pendingIncome: { type: string }
+        pendingExpense: { type: string }
+        overdue:
+          type: object
+          properties:
+            count: { type: integer }
+            total: { type: string }
+        projectedBalance: { type: string }
+        lowestPoint:
+          allOf:
+            - $ref: '#/components/schemas/ForecastPoint'
+          nullable: true
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForecastPoint'
+        truncated:
+          type: boolean
+          description: >
+            true quando until foi recuado para a janela de recorrência já materializada —
+            a previsão não alcança a data pedida
+
+    BudgetStatus:
+      type: string
+      enum: [OK, WARNING, OVER]
+
+    BudgetItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        categoryId: { type: string, format: uuid }
+        categoryName: { type: string }
+        color: { type: string, nullable: true }
+        amount: { type: string }
+        spent:
+          type: string
+          description: só o que já foi pago
+        committed:
+          type: string
+          description: tudo lançado no mês, vencido ou não
+        remaining: { type: string }
+        percent: { type: number }
+        status:
+          $ref: '#/components/schemas/BudgetStatus'
+
+    BudgetEnvelope:
+      type: object
+      properties:
+        month: { type: string, example: '2026-08' }
+        totalBudgeted: { type: string }
+        totalSpent: { type: string }
+        totalCommitted: { type: string }
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetItem'
+
+    CreateBudgetInput:
+      type: object
+      required: [categoryId, month, amount]
+      properties:
+        categoryId: { type: string, format: uuid }
+        month: { type: string, example: '2026-08' }
+        amount: { type: number }
+
+    GoalContribution:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        amount: { type: string }
+        date: { type: string, format: date-time }
+        transactionId: { type: string, format: uuid, nullable: true }
+
+    Goal:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        targetAmount: { type: string }
+        targetDate: { type: string, format: date-time, nullable: true }
+        accountId: { type: string, format: uuid, nullable: true }
+        color: { type: string, nullable: true }
+        archived: { type: boolean }
+        achievedAt: { type: string, format: date-time, nullable: true }
+        contributions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoalContribution'
+        saved: { type: string }
+        progress: { type: number, nullable: true }
+        remaining: { type: string }
+        requiredMonthly:
+          type: string
+          nullable: true
+          description: null sem data-alvo ou com data-alvo já vencida
+        pace:
+          type: string
+          nullable: true
+          description: null com menos de um mês de histórico
+        projectedDate: { type: string, format: date-time, nullable: true }
+        onTrack: { type: boolean, nullable: true }
+
+    CreateGoalInput:
+      type: object
+      required: [name, targetAmount]
+      properties:
+        name: { type: string, maxLength: 80 }
+        targetAmount: { type: number }
+        targetDate: { type: string, format: date-time }
+        accountId: { type: string, format: uuid }
+        color: { type: string }
+
+    UpdateGoalInput:
+      type: object
+      properties:
+        name: { type: string, maxLength: 80 }
+        targetAmount: { type: number }
+        targetDate: { type: string, format: date-time, nullable: true }
+        accountId: { type: string, format: uuid, nullable: true }
+        color: { type: string, nullable: true }
+        archived: { type: boolean }
+
+    CreateContributionInput:
+      type: object
+      required: [amount, date]
+      properties:
+        amount: { type: number }
+        date: { type: string, format: date-time }
+        transactionId:
+          type: string
+          format: uuid
+          description: liga o aporte a um lançamento que já existe
+        fromAccountId:
+          type: string
+          format: uuid
+          description: >
+            move dinheiro de verdade — cria uma transferência desta conta para a conta da meta
 
     RegisterInput:
       type: object
@@ -652,6 +1286,10 @@ components:
         installmentGroupId: { type: string, format: uuid, nullable: true }
         installmentNumber: { type: integer, nullable: true }
         installmentTotal: { type: integer, nullable: true }
+        accountId: { type: string, format: uuid }
+        transferGroupId: { type: string, format: uuid, nullable: true }
+        paid: { type: boolean }
+        paidAt: { type: string, format: date-time, nullable: true }
 
     CreateTransactionInput:
       type: object

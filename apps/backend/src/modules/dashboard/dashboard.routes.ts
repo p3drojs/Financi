@@ -4,9 +4,15 @@ import { validate } from '../../middlewares/validate.middleware';
 import {
   getBalanceEvolutionHandler,
   getByCategoryHandler,
+  getForecastHandler,
   getSummaryHandler,
 } from './dashboard.controller';
-import { balanceEvolutionSchema, byCategorySchema, summarySchema } from './dashboard.schema';
+import {
+  balanceEvolutionSchema,
+  byCategorySchema,
+  forecastSchema,
+  summarySchema,
+} from './dashboard.schema';
 
 export const dashboardRouter = Router();
 
@@ -19,3 +25,5 @@ dashboardRouter.get(
   validate(balanceEvolutionSchema),
   getBalanceEvolutionHandler,
 );
+
+dashboardRouter.get('/forecast', validate(forecastSchema), getForecastHandler);

@@ -8,9 +8,11 @@ import {
   createTransactionHandler,
   deleteTransactionHandler,
   getInstallmentGroupHandler,
+  getUpcomingHandler,
   getTransactionHandler,
   listRecurrencesHandler,
   listTransactionsHandler,
+  payTransactionsHandler,
   updateRecurrenceHandler,
   updateTransactionHandler,
 } from './transaction.controller';
@@ -21,10 +23,12 @@ import {
   installmentGroupParamSchema,
   listRecurrencesSchema,
   listTransactionsSchema,
+  payTransactionsSchema,
   recurrenceIdParamSchema,
   transactionIdParamSchema,
   updateRecurrenceSchema,
   updateTransactionSchema,
+  upcomingTransactionsSchema,
 } from './transaction.schema';
 
 export const transactionRouter = Router();
@@ -44,6 +48,8 @@ transactionRouter.post(
 );
 transactionRouter.get('/', validate(listTransactionsSchema), listTransactionsHandler);
 transactionRouter.get('/recurring', validate(listRecurrencesSchema), listRecurrencesHandler);
+transactionRouter.get('/upcoming', validate(upcomingTransactionsSchema), getUpcomingHandler);
+transactionRouter.post('/pay', validate(payTransactionsSchema), payTransactionsHandler);
 transactionRouter.get(
   '/installments/:groupId',
   validate(installmentGroupParamSchema),
