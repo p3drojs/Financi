@@ -1,94 +1,205 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  useBudgets,
+  useCategories,
+  useCopyBudgets,
+  useCreateBudget,
+  useDeleteBudget,
+  useUpdateBudget,
+} from '@/api/queries';
+import { BudgetItem } from '@/api/types';
+import { AmountSheet } from '@/components/AmountSheet';
 import { BackHeader } from '@/components/BackHeader';
 import { Meter } from '@/components/Meter';
-import { MockupNote } from '@/components/Mockup';
 import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
+import { EmptyState, ErrorState, InlineError, Loading } from '@/components/States';
 import { Stroke } from '@/components/Stroke';
-import { money } from '@/lib/format';
-import { CEILINGS, WITHOUT_CEILING, ceilingRemaining } from '@/lib/mockup';
+import { amountToInput } from '@/lib/money';
+import { money, monthName } from '@/lib/format';
+import { monthKey, shiftMonth, startOfMonth } from '@/lib/month';
+import { onPaper } from '@/theme/categoryColors';
 import { colors, fonts, space, tabular } from '@/theme/tokens';
 
+type Editing =
+  | { mode: 'create'; categoryId: string; categoryName: string }
+  | { mode: 'edit'; item: BudgetItem }
+  | null;
+
 export default function BudgetScreen() {
+  const anchor = startOfMonth();
+  const month = monthKey(anchor);
+  const previous = monthKey(shiftMonth(anchor, -1));
+
+  const query = useBudgets(month);
+  const categories = useCategories('EXPENSE');
+  const create = useCreateBudget();
+  const update = useUpdateBudget();
+  const remove = useDeleteBudget();
+  const copy = useCopyBudgets();
+
+  const [editing, setEditing] = useState<Editing>(null);
+
+  const envelope = query.data;
+  const items = envelope?.items ?? [];
+  const budgeted = new Set(items.map((item) => item.categoryId));
+  const loose = (categories.data ?? []).filter((category) => !budgeted.has(category.id));
+
+  const close = () => setEditing(null);
+
+  const confirm = (amount: number) => {
+    if (!editing) return;
+
+    if (editing.mode === 'create') {
+      create.mutate({ categoryId: editing.categoryId, month, amount }, { onSuccess: close });
+      return;
+    }
+
+    update.mutate({ id: editing.item.id, amount }, { onSuccess: close });
+  };
+
+  const busy = create.isPending || update.isPending || remove.isPending;
+
   return (
     <Screen scroll contentStyle={styles.content}>
       <BackHeader title="quanto ainda dá" />
 
-      <View style={styles.mockup}>
-        <MockupNote />
-      </View>
-
-      <View style={styles.balance}>
-        <Text style={styles.balanceLabel}>sobra do teto, em agosto</Text>
-        <View style={styles.balanceRow}>
-          <Text style={styles.currency}>R$</Text>
-          <Money style={styles.balanceValue}>{money(ceilingRemaining())}</Money>
-        </View>
-      </View>
-
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <Stroke color={colors.inkMuted} width={20} />
-          <Text style={styles.legendLabel}>já saiu</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={styles.faded}>
-            <Stroke color={colors.inkMuted} width={20} />
-          </View>
-          <Text style={styles.legendLabel}>já está prometido</Text>
-        </View>
-      </View>
-
-      <View style={styles.list}>
-        {CEILINGS.map((item) => {
-          const over = item.committed > item.amount;
-          return (
-            <View key={item.id} style={styles.ceiling}>
-              <View style={styles.head}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Money style={[styles.figure, over ? styles.figureOver : null]}>
-                  {`${money(item.committed)} de ${money(item.amount)}`}
-                </Money>
-              </View>
-              <Meter
-                color={over ? colors.brick : item.color}
-                spent={item.spent / item.amount}
-                committed={item.committed / item.amount}
-              />
-              <Text style={[styles.note, over ? styles.noteOver : null]}>{item.note}</Text>
+      {query.error ? (
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      ) : query.isPending || !envelope ? (
+        <Loading label="somando os tetos" />
+      ) : (
+        <>
+          <View style={styles.balance}>
+            <Text
+              style={styles.balanceLabel}
+            >{`sobra do teto, em ${monthName(`${month}-01`)}`}</Text>
+            <View style={styles.balanceRow}>
+              <Text style={styles.currency}>R$</Text>
+              <Money style={styles.balanceValue}>
+                {money(Number(envelope.totalBudgeted) - Number(envelope.totalCommitted))}
+              </Money>
             </View>
-          );
-        })}
-      </View>
+          </View>
 
-      <View style={styles.rule} />
+          <View style={styles.legend}>
+            <View style={styles.legendItem}>
+              <Stroke color={colors.inkMuted} width={20} />
+              <Text style={styles.legendLabel}>já saiu</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={styles.faded}>
+                <Stroke color={colors.inkMuted} width={20} />
+              </View>
+              <Text style={styles.legendLabel}>já está prometido</Text>
+            </View>
+          </View>
 
-      <Text style={styles.section}>sem teto neste mês</Text>
+          {items.length === 0 ? (
+            <EmptyState text="nenhum teto neste mês ainda" />
+          ) : (
+            <View style={styles.list}>
+              {items.map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={styles.ceiling}
+                  onPress={() => setEditing({ mode: 'edit', item })}
+                >
+                  <View style={styles.head}>
+                    <Text style={styles.name}>{item.categoryName}</Text>
+                    <Money
+                      style={[styles.figure, item.status === 'OVER' ? styles.figureOver : null]}
+                    >
+                      {`${money(item.committed)} de ${money(item.amount)}`}
+                    </Money>
+                  </View>
+                  <Meter
+                    color={item.status === 'OVER' ? colors.brick : onPaper(item.color)}
+                    spent={Number(item.spent) / Number(item.amount)}
+                    committed={Number(item.committed) / Number(item.amount)}
+                  />
+                  <Text style={[styles.note, item.status === 'OVER' ? styles.noteOver : null]}>
+                    {item.status === 'OVER'
+                      ? `passou ${money(Math.abs(Number(item.remaining)))}`
+                      : `${money(item.remaining)} ainda cabem`}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
 
-      <View style={styles.chips}>
-        {WITHOUT_CEILING.map((name) => (
-          <Pressable key={name} style={styles.chip}>
-            <Text style={styles.chipLabel}>{name}</Text>
-          </Pressable>
-        ))}
-      </View>
+          <View style={styles.rule} />
 
-      <View style={styles.spacer} />
+          <Text style={styles.section}>sem teto neste mês</Text>
 
-      <View style={styles.footer}>
-        <Text style={styles.footerNote}>Julho tinha os mesmos tetos.</Text>
-        <Pressable style={styles.copy}>
-          <Text style={styles.copyLabel}>copiar de julho</Text>
-        </Pressable>
-      </View>
+          {loose.length === 0 ? (
+            <Text style={styles.allSet}>toda categoria de saída já tem teto.</Text>
+          ) : (
+            <View style={styles.chips}>
+              {loose.map((category) => (
+                <Pressable
+                  key={category.id}
+                  style={styles.chip}
+                  onPress={() =>
+                    setEditing({
+                      mode: 'create',
+                      categoryId: category.id,
+                      categoryName: category.name,
+                    })
+                  }
+                >
+                  <Text style={styles.chipLabel}>{category.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          <InlineError error={create.error ?? update.error ?? remove.error ?? copy.error} />
+
+          <View style={styles.spacer} />
+
+          <View style={styles.footer}>
+            <Text style={styles.footerNote}>
+              {`copiar os tetos de ${monthName(`${previous}-01`)} para cá`}
+            </Text>
+            <Pressable
+              style={styles.copy}
+              onPress={() => copy.mutate({ fromMonth: previous, toMonth: month })}
+              disabled={copy.isPending}
+            >
+              <Text style={styles.copyLabel}>{copy.isPending ? 'copiando' : 'copiar'}</Text>
+            </Pressable>
+          </View>
+        </>
+      )}
+
+      <AmountSheet
+        visible={editing !== null}
+        title={
+          editing?.mode === 'edit'
+            ? editing.item.categoryName
+            : (editing?.categoryName ?? 'novo teto')
+        }
+        label="quanto pode gastar no mês"
+        initial={editing?.mode === 'edit' ? amountToInput(editing.item.amount) : ''}
+        confirmLabel={editing?.mode === 'edit' ? 'mudar o teto' : 'definir teto'}
+        busy={busy}
+        onConfirm={confirm}
+        onRemove={
+          editing?.mode === 'edit'
+            ? () => remove.mutate(editing.item.id, { onSuccess: close })
+            : undefined
+        }
+        onClose={close}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 30 },
-  mockup: { marginTop: 14 },
-  balance: { marginTop: 22, gap: 4 },
+  balance: { marginTop: 26, gap: 4 },
   balanceLabel: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkMuted },
   balanceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   currency: { fontFamily: fonts.serif, fontSize: 21, color: colors.inkFaint },
@@ -114,6 +225,12 @@ const styles = StyleSheet.create({
   noteOver: { color: colors.brick },
   rule: { marginTop: 24, height: 1, backgroundColor: colors.ruleHair },
   section: { marginTop: 18, fontFamily: fonts.sans, fontSize: 13, color: colors.inkFaint },
+  allSet: {
+    marginTop: 12,
+    fontFamily: fonts.serifItalic,
+    fontSize: 15,
+    color: colors.inkFaint,
+  },
   chips: { marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   chip: {
     minHeight: 36,

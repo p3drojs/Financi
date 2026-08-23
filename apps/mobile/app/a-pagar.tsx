@@ -1,25 +1,40 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { usePayTransactions, useUpcoming } from '@/api/queries';
+import { Transaction } from '@/api/types';
 import { BackHeader } from '@/components/BackHeader';
-import { MockupNote } from '@/components/Mockup';
 import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
+import { EmptyState, ErrorState, InlineError, Loading } from '@/components/States';
 import { Stroke } from '@/components/Stroke';
-import { CheckIcon, ChevronDown } from '@/components/icons';
-import { money } from '@/lib/format';
-import { MockDue, OVERDUE, UPCOMING, dueTotal } from '@/lib/mockup';
+import { CheckIcon } from '@/components/icons';
+import { dayMonth, money } from '@/lib/format';
+import { onPaper } from '@/theme/categoryColors';
 import { colors, fonts, space, tabular } from '@/theme/tokens';
 
 export default function DueScreen() {
-  const [picked, setPicked] = useState<string[]>(OVERDUE.map((item) => item.id));
+  const query = useUpcoming();
+  const pay = usePayTransactions();
+  const [picked, setPicked] = useState<string[]>([]);
+
+  const overdue = query.data?.overdue.items ?? [];
+  const upcoming = query.data?.upcoming.items ?? [];
+  const all = [...overdue, ...upcoming];
+  const chosen = all.filter((item) => picked.includes(item.id));
+  const chosenTotal = chosen.reduce((sum, item) => sum + Number(item.amount), 0);
 
   const toggle = (id: string) =>
     setPicked((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
     );
 
-  const all = [...OVERDUE, ...UPCOMING];
-  const chosen = all.filter((item) => picked.includes(item.id));
+  const confirm = () => {
+    if (chosen.length === 0) return;
+    pay.mutate(
+      chosen.map((item) => item.id),
+      { onSuccess: () => setPicked([]) },
+    );
+  };
 
   return (
     <Screen scroll gutter={false} contentStyle={styles.content}>
@@ -28,93 +43,95 @@ export default function DueScreen() {
         <Text style={styles.window}>próximos 7 dias</Text>
       </View>
 
-      <View style={styles.gutter}>
-        <View style={styles.mockup}>
-          <MockupNote />
-        </View>
-      </View>
-
-      <View style={styles.filters}>
-        <Pressable style={styles.filter}>
-          <Text style={styles.filterLabel}>tudo</Text>
-        </Pressable>
-        <Pressable style={styles.filter}>
-          <Text style={[styles.filterLabel, styles.filterActive]}>a pagar</Text>
-        </Pressable>
-        <Pressable style={styles.filter}>
-          <Text style={styles.filterLabel}>todas as contas</Text>
-          <ChevronDown />
-        </Pressable>
-      </View>
-
-      {OVERDUE.length === 0 ? (
-        <View style={styles.gutter}>
-          <Text style={styles.empty}>nada vencido — bom sinal</Text>
-        </View>
+      {query.error ? (
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      ) : query.isPending ? (
+        <Loading label="vendo o que vence" />
+      ) : all.length === 0 ? (
+        <EmptyState text="nada vencido e nada vencendo — bom sinal" />
       ) : (
         <>
-          <View style={[styles.gutter, styles.sectionHead]}>
-            <Text style={styles.overdueTitle}>venceu</Text>
-            <Money style={styles.overdueTotal}>{`-${money(dueTotal(OVERDUE))}`}</Money>
+          {overdue.length > 0 ? (
+            <>
+              <View style={[styles.gutter, styles.sectionHead]}>
+                <Text style={styles.overdueTitle}>venceu</Text>
+                <Money style={styles.overdueTotal}>
+                  {`-${money(query.data?.overdue.total ?? 0)}`}
+                </Money>
+              </View>
+              <View style={styles.list}>
+                {overdue.map((item) => (
+                  <DueRow
+                    key={item.id}
+                    transaction={item}
+                    overdue
+                    picked={picked.includes(item.id)}
+                    onToggle={() => toggle(item.id)}
+                  />
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          {upcoming.length > 0 ? (
+            <>
+              <View style={[styles.gutter, styles.sectionHead]}>
+                <Text style={styles.comingTitle}>vem aí</Text>
+                <Money style={styles.comingTotal}>
+                  {`-${money(query.data?.upcoming.total ?? 0)}`}
+                </Money>
+              </View>
+              <View style={styles.list}>
+                {upcoming.map((item) => (
+                  <DueRow
+                    key={item.id}
+                    transaction={item}
+                    overdue={false}
+                    picked={picked.includes(item.id)}
+                    onToggle={() => toggle(item.id)}
+                  />
+                ))}
+              </View>
+            </>
+          ) : null}
+
+          <View style={styles.gutter}>
+            <InlineError error={pay.error} />
           </View>
-          <View style={styles.list}>
-            {OVERDUE.map((item) => (
-              <DueRow
-                key={item.id}
-                item={item}
-                overdue
-                picked={picked.includes(item.id)}
-                onToggle={() => toggle(item.id)}
-              />
-            ))}
+
+          <View style={styles.spacer} />
+
+          <View style={styles.footer}>
+            <View style={styles.footerBody}>
+              <Text style={styles.footerLabel}>
+                {chosen.length === 1 ? '1 escolhido' : `${chosen.length} escolhidos`}
+              </Text>
+              <Money style={styles.footerTotal}>{`R$ ${money(chosenTotal)}`}</Money>
+            </View>
+            <Pressable
+              style={[styles.pay, chosen.length === 0 ? styles.payBlocked : null]}
+              onPress={confirm}
+              disabled={chosen.length === 0 || pay.isPending}
+            >
+              <Text style={[styles.payLabel, chosen.length === 0 ? styles.payLabelBlocked : null]}>
+                {pay.isPending ? 'marcando' : 'marcar como pago'}
+              </Text>
+            </Pressable>
           </View>
         </>
       )}
-
-      <View style={[styles.gutter, styles.sectionHead]}>
-        <Text style={styles.comingTitle}>vem aí</Text>
-        <Money style={styles.comingTotal}>{`-${money(dueTotal(UPCOMING))}`}</Money>
-      </View>
-
-      <View style={styles.list}>
-        {UPCOMING.map((item) => (
-          <DueRow
-            key={item.id}
-            item={item}
-            overdue={false}
-            picked={picked.includes(item.id)}
-            onToggle={() => toggle(item.id)}
-          />
-        ))}
-      </View>
-
-      <View style={styles.spacer} />
-
-      <View style={styles.footer}>
-        <View style={styles.footerBody}>
-          <Text style={styles.footerLabel}>
-            {chosen.length === 1 ? '1 escolhido' : `${chosen.length} escolhidos`}
-          </Text>
-          <Money style={styles.footerTotal}>{`R$ ${money(dueTotal(chosen))}`}</Money>
-        </View>
-        <Pressable style={[styles.pay, chosen.length === 0 ? styles.payBlocked : null]}>
-          <Text style={[styles.payLabel, chosen.length === 0 ? styles.payLabelBlocked : null]}>
-            marcar como pago
-          </Text>
-        </Pressable>
-      </View>
     </Screen>
   );
 }
 
 interface DueRowProps {
-  item: MockDue;
+  transaction: Transaction;
   overdue: boolean;
   picked: boolean;
   onToggle: () => void;
 }
 
-function DueRow({ item, overdue, picked, onToggle }: DueRowProps) {
+function DueRow({ transaction, overdue, picked, onToggle }: DueRowProps) {
   return (
     <Pressable onPress={onToggle} style={[styles.row, overdue ? null : styles.rowPending]}>
       <View style={styles.check}>
@@ -124,20 +141,26 @@ function DueRow({ item, overdue, picked, onToggle }: DueRowProps) {
       </View>
 
       <View style={styles.dateColumn}>
-        <Money style={[styles.date, overdue ? styles.dateOverdue : null]}>{item.date}</Money>
-        {item.installment ? <Money style={styles.installment}>{item.installment}</Money> : null}
+        <Money style={[styles.date, overdue ? styles.dateOverdue : null]}>
+          {dayMonth(transaction.date)}
+        </Money>
+        {transaction.installmentNumber ? (
+          <Money style={styles.installment}>
+            {`${transaction.installmentNumber}/${transaction.installmentTotal}`}
+          </Money>
+        ) : null}
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.name}>{item.name}</Text>
+        <Text style={styles.name}>{transaction.description ?? transaction.category.name}</Text>
         <View style={styles.meta}>
-          <Stroke color={item.color} width={14} thickness={2.4} />
-          <Text style={styles.caption}>{item.category}</Text>
-          <Text style={[styles.caption, overdue ? styles.captionOverdue : null]}>{item.note}</Text>
+          <Stroke color={onPaper(transaction.category.color)} width={14} thickness={2.4} />
+          <Text style={styles.caption}>{transaction.category.name}</Text>
+          {transaction.recurrenceId ? <Text style={styles.caption}>se repete</Text> : null}
         </View>
       </View>
 
-      <Money style={styles.amount}>{`-${money(item.amount)}`}</Money>
+      <Money style={styles.amount}>{`-${money(transaction.amount)}`}</Money>
     </Pressable>
   );
 }
@@ -152,24 +175,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   window: { fontFamily: fonts.sans, fontSize: 12, color: colors.inkFaint },
-  mockup: { marginTop: 14 },
-  filters: {
-    marginTop: 4,
-    paddingHorizontal: space.gutter,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 18,
-  },
-  filter: { minHeight: space.touch, flexDirection: 'row', alignItems: 'center', gap: 5 },
-  filterLabel: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkFaint },
-  filterActive: {
-    color: colors.ink,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.rule,
-    paddingBottom: 2,
-  },
   sectionHead: {
-    marginTop: 14,
+    marginTop: 22,
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
@@ -178,12 +185,6 @@ const styles = StyleSheet.create({
   overdueTotal: { fontSize: 13, color: colors.brick, ...tabular },
   comingTitle: { fontFamily: fonts.serifItalic, fontSize: 15, color: colors.inkMuted },
   comingTotal: { fontSize: 13, color: colors.inkFaint, ...tabular },
-  empty: {
-    marginTop: 30,
-    fontFamily: fonts.serifItalic,
-    fontSize: 16,
-    color: colors.inkFaint,
-  },
   list: { marginTop: 10 },
   row: {
     flexDirection: 'row',
@@ -212,7 +213,6 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.sans, fontSize: 14, color: colors.ink },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' },
   caption: { fontFamily: fonts.sans, fontSize: 12, color: colors.inkFaint },
-  captionOverdue: { color: colors.brick },
   amount: { fontSize: 15, color: colors.brick, marginTop: 1, ...tabular },
   spacer: { flexGrow: 1, minHeight: 20 },
   footer: {
