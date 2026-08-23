@@ -21,6 +21,8 @@ const allowedOrigins = env.CORS_ORIGIN?.split(',')
 export function createApp(): Express {
   const app = express();
 
+  app.set('trust proxy', 1);
+
   app.use(helmet());
   app.use(cors({ origin: allowedOrigins && allowedOrigins.length > 0 ? allowedOrigins : false }));
   app.use(express.json());
