@@ -41,7 +41,23 @@ async function assertCategoryMatches(userId: string, categoryId: string, type: s
     throw new AppError('O tipo da categoria não corresponde ao tipo da transação', 400);
   }
 
+  if (category.system) {
+    throw new AppError(
+      'Esta categoria é do sistema e só pode ser usada por transferências entre contas',
+      400,
+    );
+  }
+
   return category;
+}
+
+function assertNotTransfer(transferGroupId: string | null) {
+  if (transferGroupId) {
+    throw new AppError(
+      'Transferência não se edita pela metade. Apague a transferência inteira e refaça.',
+      400,
+    );
+  }
 }
 
 async function extendRecurrenceBatch(recurrence: Recurrence, now: Date): Promise<number> {
@@ -284,6 +300,7 @@ export async function getTransactionById(userId: string, id: string) {
 
 export async function updateTransaction(userId: string, id: string, input: UpdateTransactionInput) {
   const transaction = await getTransactionById(userId, id);
+  assertNotTransfer(transaction.transferGroupId);
 
   if (input.categoryId) {
     await assertCategoryMatches(userId, input.categoryId, transaction.type);
@@ -344,7 +361,8 @@ export async function getUpcoming(userId: string, days: number) {
 }
 
 export async function deleteTransaction(userId: string, id: string) {
-  await getTransactionById(userId, id);
+  const transaction = await getTransactionById(userId, id);
+  assertNotTransfer(transaction.transferGroupId);
   await prisma.transaction.delete({ where: { id } });
 }
 
