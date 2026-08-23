@@ -7,21 +7,8 @@ import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
 import { EmptyState, ErrorState, Loading } from '@/components/States';
 import { intervalLabel, money, signedMoney } from '@/lib/format';
+import { CEILINGS, GOALS, ceilingRemaining, ceilingTotal } from '@/lib/mockup';
 import { colors, fonts, space, tabular, type } from '@/theme/tokens';
-
-const CEILINGS = [
-  { id: 'alimentacao', name: 'Alimentação', color: '#FF9A4D', spent: 968.4, committed: 968.4, amount: 1200 },
-  { id: 'transporte', name: 'Transporte', color: '#57ACE8', spent: 312.4, committed: 440.6, amount: 600 },
-  { id: 'compras', name: 'Compras', color: '#CE867E', spent: 297.5, committed: 518, amount: 400 },
-];
-
-const GOALS = [
-  { id: 'notebook', name: 'Notebook novo', saved: 1150, target: 4200, pace: 'no ritmo de agora, chega em março' },
-  { id: 'viagem', name: 'Viagem', saved: 300, target: 3000, pace: 'sem data marcada' },
-];
-
-const REMAINING = 1208.4;
-const TOTAL_CEILING = 3400;
 
 export default function PlanScreen() {
   const query = useRecurrences();
@@ -41,12 +28,12 @@ export default function PlanScreen() {
       <View style={styles.sectionHead}>
         <Text style={styles.sectionTitle}>quanto ainda dá</Text>
         <Money style={styles.sectionValue}>
-          {`${money(REMAINING)} de ${money(TOTAL_CEILING)}`}
+          {`${money(ceilingRemaining())} de ${money(ceilingTotal())}`}
         </Money>
       </View>
 
       <View style={styles.ceilings}>
-        {CEILINGS.map((item) => {
+        {CEILINGS.slice(0, 3).map((item) => {
           const over = item.committed > item.amount;
           return (
             <View key={item.id} style={styles.ceiling}>
@@ -128,7 +115,9 @@ export default function PlanScreen() {
                 </Money>
               </View>
               <Meter color={colors.sage} spent={goal.saved / goal.target} committed={0} />
-              <Text style={styles.caption}>{goal.pace}</Text>
+              <Text style={styles.caption}>
+                {goal.targetLabel ? `alvo em ${goal.targetLabel}` : 'sem data marcada'}
+              </Text>
             </Pressable>
           </Link>
         ))}
