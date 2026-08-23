@@ -1,6 +1,7 @@
 import { Goal, GoalContribution, Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { AppError, ConflictError, NotFoundError } from '../../utils/AppError';
+import { transferWithin } from '../accounts/account.service';
 import {
   CreateContributionInput,
   CreateGoalInput,
@@ -153,7 +154,14 @@ export async function addContribution(
   goalId: string,
   input: CreateContributionInput,
 ) {
-  await findGoalOrFail(userId, goalId);
+  const goal = await findGoalOrFail(userId, goalId);
+
+  if (input.fromAccountId && !goal.accountId) {
+    throw new AppError(
+      'Esta meta não tem conta vinculada, então não há para onde mover o dinheiro',
+      400,
+    );
+  }
 
   if (input.transactionId) {
     const transaction = await prisma.transaction.findFirst({
@@ -173,17 +181,34 @@ export async function addContribution(
     }
   }
 
-  await prisma.goalContribution.create({
-    data: {
-      goalId,
-      amount: new Prisma.Decimal(input.amount),
-      date: input.date,
-      transactionId: input.transactionId,
-    },
+  const movesMoney = Boolean(input.fromAccountId && goal.accountId);
+
+  await prisma.$transaction(async (tx) => {
+    let transactionId = input.transactionId ?? null;
+
+    if (movesMoney) {
+      const transfer = await transferWithin(tx, userId, {
+        fromAccountId: input.fromAccountId as string,
+        toAccountId: goal.accountId as string,
+        amount: input.amount,
+        date: input.date,
+        description: `Aporte para ${goal.name}`,
+      });
+
+      transactionId = transfer.to.id;
+    }
+
+    await tx.goalContribution.create({
+      data: {
+        goalId,
+        amount: new Prisma.Decimal(input.amount),
+        date: input.date,
+        transactionId,
+      },
+    });
   });
 
-  const goal = await findGoalOrFail(userId, goalId);
-  await syncAchievedAt(goal);
+  await syncAchievedAt(await findGoalOrFail(userId, goalId));
 
   return present(await findGoalOrFail(userId, goalId));
 }
@@ -199,10 +224,21 @@ export async function removeContribution(userId: string, goalId: string, contrib
     throw new NotFoundError('Aporte não encontrado');
   }
 
-  await prisma.goalContribution.delete({ where: { id: contributionId } });
+  const funding = contribution.transactionId
+    ? await prisma.transaction.findFirst({ where: { id: contribution.transactionId, userId } })
+    : null;
 
-  const goal = await findGoalOrFail(userId, goalId);
-  await syncAchievedAt(goal);
+  await prisma.$transaction(async (tx) => {
+    await tx.goalContribution.delete({ where: { id: contributionId } });
+
+    if (funding?.transferGroupId) {
+      await tx.transaction.deleteMany({
+        where: { userId, transferGroupId: funding.transferGroupId },
+      });
+    }
+  });
+
+  await syncAchievedAt(await findGoalOrFail(userId, goalId));
 
   return present(await findGoalOrFail(userId, goalId));
 }

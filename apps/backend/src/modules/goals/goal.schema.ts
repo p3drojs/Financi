@@ -44,6 +44,7 @@ export const createContributionSchema = z.object({
     amount: z.number().positive(),
     date: z.coerce.date(),
     transactionId: z.string().uuid().optional(),
+    fromAccountId: z.string().uuid().optional(),
   }),
   params: z.object({
     id: z.string().uuid(),

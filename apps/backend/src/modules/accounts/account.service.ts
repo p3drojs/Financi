@@ -183,15 +183,23 @@ async function findOrCreateTransferCategory(
   });
 }
 
-export async function createTransfer(userId: string, input: CreateTransferInput) {
+export async function transferWithin(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  input: CreateTransferInput,
+) {
   if (input.fromAccountId === input.toAccountId) {
     throw new AppError('A conta de origem e a de destino precisam ser diferentes', 400);
   }
 
   const [from, to] = await Promise.all([
-    findAccountOrFail(userId, input.fromAccountId),
-    findAccountOrFail(userId, input.toAccountId),
+    tx.account.findFirst({ where: { id: input.fromAccountId, userId } }),
+    tx.account.findFirst({ where: { id: input.toAccountId, userId } }),
   ]);
+
+  if (!from || !to) {
+    throw new NotFoundError('Conta não encontrada');
+  }
 
   if (from.archived || to.archived) {
     throw new AppError('Conta arquivada não recebe nem envia transferência', 400);
@@ -200,43 +208,45 @@ export async function createTransfer(userId: string, input: CreateTransferInput)
   const transferGroupId = randomUUID();
   const paidState = resolvePaid(input.date);
 
-  return prisma.$transaction(async (tx) => {
-    const [outgoingCategory, incomingCategory] = await Promise.all([
-      findOrCreateTransferCategory(userId, 'EXPENSE', tx),
-      findOrCreateTransferCategory(userId, 'INCOME', tx),
-    ]);
+  const [outgoingCategory, incomingCategory] = await Promise.all([
+    findOrCreateTransferCategory(userId, 'EXPENSE', tx),
+    findOrCreateTransferCategory(userId, 'INCOME', tx),
+  ]);
 
-    const shared = {
-      userId,
-      amount: new Prisma.Decimal(input.amount),
-      description: input.description,
-      date: input.date,
-      transferGroupId,
-      ...paidState,
-    };
+  const shared = {
+    userId,
+    amount: new Prisma.Decimal(input.amount),
+    description: input.description,
+    date: input.date,
+    transferGroupId,
+    ...paidState,
+  };
 
-    const outgoing = await tx.transaction.create({
-      data: {
-        ...shared,
-        accountId: input.fromAccountId,
-        categoryId: outgoingCategory.id,
-        type: 'EXPENSE',
-      },
-      include: transactionInclude,
-    });
-
-    const incoming = await tx.transaction.create({
-      data: {
-        ...shared,
-        accountId: input.toAccountId,
-        categoryId: incomingCategory.id,
-        type: 'INCOME',
-      },
-      include: transactionInclude,
-    });
-
-    return { transferGroupId, from: outgoing, to: incoming };
+  const outgoing = await tx.transaction.create({
+    data: {
+      ...shared,
+      accountId: input.fromAccountId,
+      categoryId: outgoingCategory.id,
+      type: 'EXPENSE',
+    },
+    include: transactionInclude,
   });
+
+  const incoming = await tx.transaction.create({
+    data: {
+      ...shared,
+      accountId: input.toAccountId,
+      categoryId: incomingCategory.id,
+      type: 'INCOME',
+    },
+    include: transactionInclude,
+  });
+
+  return { transferGroupId, from: outgoing, to: incoming };
+}
+
+export async function createTransfer(userId: string, input: CreateTransferInput) {
+  return prisma.$transaction((tx) => transferWithin(tx, userId, input));
 }
 
 export async function deleteTransfer(userId: string, transferGroupId: string) {

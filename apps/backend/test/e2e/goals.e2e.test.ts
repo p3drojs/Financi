@@ -181,3 +181,103 @@ describe('Metas (e2e)', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('Aporte que move dinheiro (e2e)', () => {
+  it('tira da conta de origem e põe na conta da meta, sem virar despesa', async () => {
+    const { token, accountId } = await registerUser(app);
+    const vault = await createAccount(app, token, { name: 'Reserva', kind: 'SAVINGS' });
+    await request(app)
+      .patch(`/accounts/${accountId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ initialBalance: 1000 });
+
+    const goal = await createGoal(token, { targetAmount: 5000, accountId: vault.id });
+
+    const before = await request(app)
+      .get('/dashboard/summary')
+      .set('Authorization', `Bearer ${token}`);
+
+    const res = await post(token, `/goals/${goal.body.id}/contributions`, {
+      amount: 500,
+      date: PAST,
+      fromAccountId: accountId,
+    });
+
+    expect(res.status).toBe(201);
+    expect(Number(res.body.saved)).toBe(500);
+
+    const accounts = await request(app).get('/accounts').set('Authorization', `Bearer ${token}`);
+    const source = accounts.body.find((item: { id: string }) => item.id === accountId);
+    const target = accounts.body.find((item: { id: string }) => item.id === vault.id);
+
+    expect(Number(source.balance)).toBe(500);
+    expect(Number(target.balance)).toBe(500);
+
+    const after = await request(app)
+      .get('/dashboard/summary')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(after.body.totalIncome).toBe(before.body.totalIncome);
+    expect(after.body.totalExpense).toBe(before.body.totalExpense);
+  });
+
+  it('recusa fromAccountId quando a meta não tem conta vinculada', async () => {
+    const { token, accountId } = await registerUser(app);
+    const goal = await createGoal(token, { targetAmount: 1000 });
+
+    const res = await post(token, `/goals/${goal.body.id}/contributions`, {
+      amount: 100,
+      date: PAST,
+      fromAccountId: accountId,
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('sem fromAccountId continua sendo só escrituração', async () => {
+    const { token, accountId } = await registerUser(app);
+    const vault = await createAccount(app, token, { name: 'Cofre', kind: 'SAVINGS' });
+    const goal = await createGoal(token, { targetAmount: 1000, accountId: vault.id });
+
+    await post(token, `/goals/${goal.body.id}/contributions`, { amount: 100, date: PAST });
+
+    const accounts = await request(app).get('/accounts').set('Authorization', `Bearer ${token}`);
+    const target = accounts.body.find((item: { id: string }) => item.id === vault.id);
+    const source = accounts.body.find((item: { id: string }) => item.id === accountId);
+
+    expect(Number(target.balance)).toBe(0);
+    expect(Number(source.balance)).toBe(0);
+  });
+
+  it('apagar o aporte desfaz a transferência inteira', async () => {
+    const { token, accountId } = await registerUser(app);
+    const vault = await createAccount(app, token, { name: 'Guardado', kind: 'SAVINGS' });
+    await request(app)
+      .patch(`/accounts/${accountId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ initialBalance: 800 });
+
+    const goal = await createGoal(token, { targetAmount: 5000, accountId: vault.id });
+    const contributed = await post(token, `/goals/${goal.body.id}/contributions`, {
+      amount: 300,
+      date: PAST,
+      fromAccountId: accountId,
+    });
+
+    const contributionId = contributed.body.contributions[0].id as string;
+
+    await request(app)
+      .delete(`/goals/${goal.body.id}/contributions/${contributionId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    const accounts = await request(app).get('/accounts').set('Authorization', `Bearer ${token}`);
+    const source = accounts.body.find((item: { id: string }) => item.id === accountId);
+    const target = accounts.body.find((item: { id: string }) => item.id === vault.id);
+
+    expect(Number(source.balance)).toBe(800);
+    expect(Number(target.balance)).toBe(0);
+
+    const listed = await request(app).get('/transactions').set('Authorization', `Bearer ${token}`);
+    expect(listed.body.total).toBe(0);
+  });
+});
