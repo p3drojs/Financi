@@ -40,18 +40,13 @@ describe('generateInstallmentDates', () => {
 });
 
 describe('summarizeInstallments', () => {
-  const now = new Date(2026, 5, 15);
-
-  it('conta como pagas as parcelas com data já vencida', () => {
-    const summary = summarizeInstallments(
-      [
-        { amount: '100.00', date: new Date(2026, 3, 15) },
-        { amount: '100.00', date: new Date(2026, 4, 15) },
-        { amount: '100.00', date: new Date(2026, 5, 15) },
-        { amount: '100.00', date: new Date(2026, 6, 15) },
-      ],
-      now,
-    );
+  it('conta como pagas as parcelas marcadas como pagas, não as de data vencida', () => {
+    const summary = summarizeInstallments([
+      { amount: '100.00', paid: true },
+      { amount: '100.00', paid: true },
+      { amount: '100.00', paid: true },
+      { amount: '100.00', paid: false },
+    ]);
 
     expect(summary.installmentsGenerated).toBe(4);
     expect(summary.paidCount).toBe(3);
@@ -61,23 +56,27 @@ describe('summarizeInstallments', () => {
     expect(summary.remainingAmount.toString()).toBe('100');
   });
 
+  it('não conta parcela vencida que ainda não foi paga', () => {
+    const summary = summarizeInstallments([
+      { amount: '100.00', paid: false },
+      { amount: '100.00', paid: false },
+    ]);
+
+    expect(summary.paidCount).toBe(0);
+    expect(summary.remainingAmount.toString()).toBe('200');
+  });
+
   it('soma o resto que ficou na última parcela', () => {
     const amounts = splitInstallments('100.00', 3);
-    const summary = summarizeInstallments(
-      amounts.map((amount, index) => ({ amount, date: new Date(2026, index, 1) })),
-      now,
-    );
+    const summary = summarizeInstallments(amounts.map((amount) => ({ amount, paid: true })));
 
     expect(summary.totalAmount.toString()).toBe('100');
     expect(summary.paidCount).toBe(3);
     expect(summary.remainingAmount.toString()).toBe('0');
   });
 
-  it('trata grupo sem nenhuma parcela vencida', () => {
-    const summary = summarizeInstallments(
-      [{ amount: new Prisma.Decimal('50.00'), date: new Date(2027, 0, 1) }],
-      now,
-    );
+  it('trata grupo sem nenhuma parcela paga', () => {
+    const summary = summarizeInstallments([{ amount: new Prisma.Decimal('50.00'), paid: false }]);
 
     expect(summary.paidCount).toBe(0);
     expect(summary.paidAmount.toString()).toBe('0');

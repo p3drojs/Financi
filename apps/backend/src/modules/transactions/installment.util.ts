@@ -33,7 +33,7 @@ export function generateInstallmentDates(startDate: Date, count: number): Date[]
 
 export interface InstallmentEntry {
   amount: Prisma.Decimal.Value;
-  date: Date;
+  paid: boolean;
 }
 
 export interface InstallmentGroupSummary {
@@ -45,14 +45,11 @@ export interface InstallmentGroupSummary {
   remainingAmount: Prisma.Decimal;
 }
 
-export function summarizeInstallments(
-  entries: InstallmentEntry[],
-  now = new Date(),
-): InstallmentGroupSummary {
+export function summarizeInstallments(entries: InstallmentEntry[]): InstallmentGroupSummary {
   const sum = (items: InstallmentEntry[]) =>
     items.reduce((total, item) => total.plus(item.amount), new Prisma.Decimal(0));
 
-  const paid = entries.filter((entry) => entry.date <= now);
+  const paid = entries.filter((entry) => entry.paid);
   const totalAmount = sum(entries);
   const paidAmount = sum(paid);
 
