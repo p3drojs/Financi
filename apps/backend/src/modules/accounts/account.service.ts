@@ -1,9 +1,20 @@
-import { Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { Prisma, TransactionType } from '@prisma/client';
 import { prisma } from '../../config/prisma';
-import { ConflictError, NotFoundError } from '../../utils/AppError';
+import { AppError, ConflictError, NotFoundError } from '../../utils/AppError';
+import {
+  SYSTEM_TRANSFER_CATEGORY_COLOR,
+  SYSTEM_TRANSFER_CATEGORY_NAME,
+} from '../categories/category.defaults';
 import { transactionInclude } from '../transactions/transaction.include';
+import { resolvePaid } from '../transactions/transaction.util';
 import { DEFAULT_ACCOUNT } from './account.defaults';
-import { CreateAccountInput, ListAccountsQuery, UpdateAccountInput } from './account.schema';
+import {
+  CreateAccountInput,
+  CreateTransferInput,
+  ListAccountsQuery,
+  UpdateAccountInput,
+} from './account.schema';
 import { AccountMovement, computeBalance } from './account.util';
 
 const RECENT_TRANSACTIONS = 20;
@@ -144,6 +155,98 @@ export async function updateAccount(userId: string, id: string, input: UpdateAcc
     ...account,
     balance: computeBalance(account.initialBalance, byAccount.get(id) ?? []),
   };
+}
+
+async function findOrCreateTransferCategory(
+  userId: string,
+  type: TransactionType,
+  client: Prisma.TransactionClient,
+) {
+  const existing = await client.category.findUnique({
+    where: {
+      userId_name_type: { userId, name: SYSTEM_TRANSFER_CATEGORY_NAME, type },
+    },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return client.category.create({
+    data: {
+      userId,
+      name: SYSTEM_TRANSFER_CATEGORY_NAME,
+      type,
+      color: SYSTEM_TRANSFER_CATEGORY_COLOR,
+      system: true,
+    },
+  });
+}
+
+export async function createTransfer(userId: string, input: CreateTransferInput) {
+  if (input.fromAccountId === input.toAccountId) {
+    throw new AppError('A conta de origem e a de destino precisam ser diferentes', 400);
+  }
+
+  const [from, to] = await Promise.all([
+    findAccountOrFail(userId, input.fromAccountId),
+    findAccountOrFail(userId, input.toAccountId),
+  ]);
+
+  if (from.archived || to.archived) {
+    throw new AppError('Conta arquivada não recebe nem envia transferência', 400);
+  }
+
+  const transferGroupId = randomUUID();
+  const paidState = resolvePaid(input.date);
+
+  return prisma.$transaction(async (tx) => {
+    const [outgoingCategory, incomingCategory] = await Promise.all([
+      findOrCreateTransferCategory(userId, 'EXPENSE', tx),
+      findOrCreateTransferCategory(userId, 'INCOME', tx),
+    ]);
+
+    const shared = {
+      userId,
+      amount: new Prisma.Decimal(input.amount),
+      description: input.description,
+      date: input.date,
+      transferGroupId,
+      ...paidState,
+    };
+
+    const outgoing = await tx.transaction.create({
+      data: {
+        ...shared,
+        accountId: input.fromAccountId,
+        categoryId: outgoingCategory.id,
+        type: 'EXPENSE',
+      },
+      include: transactionInclude,
+    });
+
+    const incoming = await tx.transaction.create({
+      data: {
+        ...shared,
+        accountId: input.toAccountId,
+        categoryId: incomingCategory.id,
+        type: 'INCOME',
+      },
+      include: transactionInclude,
+    });
+
+    return { transferGroupId, from: outgoing, to: incoming };
+  });
+}
+
+export async function deleteTransfer(userId: string, transferGroupId: string) {
+  const legs = await prisma.transaction.count({ where: { userId, transferGroupId } });
+
+  if (legs === 0) {
+    throw new NotFoundError('Transferência não encontrada');
+  }
+
+  await prisma.transaction.deleteMany({ where: { userId, transferGroupId } });
 }
 
 export async function deleteAccount(userId: string, id: string) {

@@ -1,6 +1,11 @@
 import { NextFunction, Request, Response } from 'express';
 import * as accountService from './account.service';
-import { CreateAccountInput, ListAccountsQuery, UpdateAccountInput } from './account.schema';
+import {
+  CreateAccountInput,
+  CreateTransferInput,
+  ListAccountsQuery,
+  UpdateAccountInput,
+} from './account.schema';
 
 export async function listAccountsHandler(
   req: Request,
@@ -62,6 +67,35 @@ export async function updateAccountHandler(
       req.body as UpdateAccountInput,
     );
     res.status(200).json(account);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function createTransferHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const transfer = await accountService.createTransfer(
+      req.userId as string,
+      req.body as CreateTransferInput,
+    );
+    res.status(201).json(transfer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteTransferHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    await accountService.deleteTransfer(req.userId as string, req.params.transferGroupId as string);
+    res.status(204).send();
   } catch (err) {
     next(err);
   }

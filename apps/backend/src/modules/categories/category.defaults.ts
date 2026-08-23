@@ -24,6 +24,7 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
 ];
 
 export const SYSTEM_TRANSFER_CATEGORY_NAME = 'Transferência';
+export const SYSTEM_TRANSFER_CATEGORY_COLOR = '#546E7A';
 
 export const SYSTEM_CATEGORIES: DefaultCategory[] = [
   { name: SYSTEM_TRANSFER_CATEGORY_NAME, type: 'INCOME', color: '#546E7A', system: true },
