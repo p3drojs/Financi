@@ -85,6 +85,7 @@ export const listTransactionsSchema = z.object({
     dateFrom: z.coerce.date().optional(),
     dateTo: z.coerce.date().optional(),
     categoryId: z.string().uuid().optional(),
+    accountId: z.string().uuid().optional(),
     type: z.enum(['INCOME', 'EXPENSE']).optional(),
     tag: z.string().optional(),
     page: z.coerce.number().int().min(1).default(1),

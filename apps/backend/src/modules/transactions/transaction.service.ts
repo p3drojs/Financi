@@ -217,6 +217,7 @@ export async function listTransactions(userId: string, query: ListTransactionsQu
   const where = {
     userId,
     ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+    ...(query.accountId ? { accountId: query.accountId } : {}),
     ...(query.type ? { type: query.type } : {}),
     ...(query.dateFrom || query.dateTo
       ? {
