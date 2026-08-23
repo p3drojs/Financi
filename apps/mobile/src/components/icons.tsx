@@ -91,3 +91,38 @@ export function StepMinus({ color = colors.inkMuted }: IconProps) {
     </Svg>
   );
 }
+
+export function TransferIcon({ color = colors.inkFaint, size = 15 }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M2.5 5.5h11M11 3l2.5 2.5L11 8"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M13.5 10.5h-11M5 8l-2.5 2.5L5 13"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+export function CheckIcon({ color = colors.paper, size = 10 }: IconProps) {
+  return (
+    <Svg width={size} height={size * 0.8} viewBox="0 0 10 8" fill="none">
+      <Path
+        d="M1 4.2 3.7 6.8 9 1.4"
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
