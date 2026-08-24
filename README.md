@@ -1,49 +1,51 @@
 # Financi
 
-Controle financeiro pessoal — API REST + app mobile, construídos do zero como projeto
-de portfólio. Registra receitas, despesas, transferências entre contas, parcelamentos,
-lançamentos recorrentes, orçamentos por categoria e metas de economia.
+> Leia em [Português](README.pt-BR.md).
 
-Não depende de nenhuma integração de terceiros: os dados são lançados pelo próprio
-usuário e ficam num banco que ele controla.
+Personal finance tracker — a REST API plus a mobile app, both built from scratch as a
+portfolio project. It records income, expenses, transfers between accounts, installment
+purchases, recurring entries, per-category budgets and savings goals.
+
+It depends on no third-party integration: the data is entered by the user and lives in a
+database the user controls.
 
 ## Stack
 
-| Camada | Tecnologias |
+| Layer | Technologies |
 | --- | --- |
 | Backend | Node.js 20, TypeScript, Express, Prisma, PostgreSQL |
 | Mobile | React Native, Expo, Expo Router |
-| Validação | Zod |
-| Auth | e-mail + senha (bcrypt), JWT de acesso + refresh token rotativo |
-| Testes | Jest (unitário), Supertest (E2E contra banco real), StrykerJS (mutação) |
-| Qualidade | ESLint, Prettier, SonarQube |
-| CI/CD | GitHub Actions, deploy no Render + Postgres no Neon |
+| Validation | Zod |
+| Auth | email + password (bcrypt), JWT access token + rotating refresh token |
+| Testing | Jest (unit), Supertest (E2E against a real database), StrykerJS (mutation) |
+| Quality | ESLint, Prettier, SonarQube |
+| CI/CD | GitHub Actions, deployed to Render with Postgres on Neon |
 
-## Modelo de domínio
+## Domain model
 
-`User` tem `Account` (carteira, conta corrente, cartão) e `Category` (tipada em
-INCOME/EXPENSE). Toda `Transaction` é um lançamento único preso a uma conta, e pode:
+A `User` owns `Account`s (wallet, checking account, credit card) and `Category`s (typed as
+INCOME/EXPENSE). Every `Transaction` is a single ledger entry tied to one account, and it may:
 
-- pertencer a uma `Recurrence` — template com intervalo em meses, cujas ocorrências são
-  pré-geradas em lote numa janela móvel de 12 meses;
-- fazer parte de um parcelamento — N transações com o mesmo `installmentGroupId`, o
-  resto do arredondamento indo na última;
-- formar uma transferência — um par de transações com o mesmo `transferGroupId`, uma
-  saída na conta de origem e uma entrada no destino, excluídas de todo agregado de
-  receita/despesa;
-- carregar `Tag` livres, criadas em tempo de escrita.
+- belong to a `Recurrence` — a template with an interval in months, whose occurrences are
+  pre-generated in batch within a rolling 12-month window;
+- be part of an installment plan — N transactions sharing an `installmentGroupId`, with the
+  rounding remainder landing on the last one;
+- form a transfer — a pair of transactions sharing a `transferGroupId`, an outflow on the
+  source account and an inflow on the destination, excluded from every income/expense
+  aggregate;
+- carry free-form `Tag`s, created at write time.
 
-`Budget` é um teto por categoria e mês. `Goal` acumula `GoalContribution` e tem o
-progresso sempre derivado, nunca persistido.
+`Budget` is a ceiling per category per month. `Goal` accumulates `GoalContribution`s and its
+progress is always derived, never persisted.
 
-O campo `paid` separa o que de fato aconteceu do que está apenas agendado — ocorrências
-futuras de recorrência e parcelas não vencidas são o lado pendente.
+The `paid` field separates what actually happened from what is merely scheduled — future
+recurrence occurrences and unmatured installments are the pending side.
 
-## Rodando localmente
+## Running locally
 
-Pré-requisitos: Node.js 20, Docker.
+Prerequisites: Node.js 20, Docker.
 
-O Postgres local sobe na porta **5439** para não colidir com uma instalação nativa.
+The local Postgres runs on port **5439** so it does not collide with a native installation.
 
 ```bash
 docker compose up -d
@@ -55,8 +57,8 @@ docker compose up -d
 cd apps/backend && cp .env.example .env && npm ci && npm run prisma:migrate:dev && npm run dev
 ```
 
-A API sobe em `http://localhost:3000`. A especificação OpenAPI fica em
-`apps/backend/openapi.yaml` e é servida com Swagger UI em `/docs` fora de produção.
+The API comes up at `http://localhost:3000`. The OpenAPI specification lives in
+`apps/backend/openapi.yaml` and is served with Swagger UI at `/docs` outside production.
 
 ### Mobile
 
@@ -64,9 +66,9 @@ A API sobe em `http://localhost:3000`. A especificação OpenAPI fica em
 cd apps/mobile && cp .env.example .env && npm ci && npm start
 ```
 
-Aponte `EXPO_PUBLIC_API_URL` para o backend local e abra pelo Expo Go.
+Point `EXPO_PUBLIC_API_URL` at the local backend and open it through Expo Go.
 
-## Testes e qualidade
+## Testing and quality
 
 ```bash
 npm run test:unit
@@ -80,16 +82,16 @@ npm run test:e2e
 npm run test:coverage -- --runInBand
 ```
 
-Os testes E2E rodam contra um banco Postgres real (`financi_test`), não contra mocks.
-`npm run test:mutation` roda o StrykerJS sobre a lógica de negócio.
+The E2E tests run against a real Postgres database (`financi_test`), not against mocks.
+`npm run test:mutation` runs StrykerJS over the business logic.
 
-## Arquitetura
+## Architecture
 
-Monorepo com `apps/backend` e `apps/mobile`. O backend é organizado por domínio, não
-por tipo de arquivo: cada pasta em `src/modules/<domínio>/` carrega suas próprias
-rotas, controller, service e schema. Código transversal fica em `src/config/`,
-`src/middlewares/` e `src/utils/`.
+A monorepo with `apps/backend` and `apps/mobile`. The backend is organized by domain rather
+than by file type: each folder under `src/modules/<domain>/` carries its own routes,
+controller, service and schema. Cross-cutting code lives in `src/config/`, `src/middlewares/`
+and `src/utils/`.
 
-## Licença
+## License
 
-MIT — veja [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
