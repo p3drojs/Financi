@@ -97,10 +97,12 @@ export default function RootLayout() {
                 <Stack.Screen name="repeticoes" />
                 <Stack.Screen name="recorrencia/[id]" />
                 <Stack.Screen name="contas" />
+                <Stack.Screen name="conta/nova" />
                 <Stack.Screen name="conta/[id]" />
                 <Stack.Screen name="transferencia" />
                 <Stack.Screen name="a-pagar" />
                 <Stack.Screen name="orcamento" />
+                <Stack.Screen name="meta/nova" />
                 <Stack.Screen name="meta/[id]" />
                 <Stack.Screen name="meta/aporte" />
                 <Stack.Screen name="nova/index" />

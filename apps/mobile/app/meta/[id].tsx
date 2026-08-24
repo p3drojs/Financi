@@ -1,30 +1,67 @@
-import { Link, useLocalSearchParams } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useAccounts, useDeleteGoal, useGoal, useRemoveContribution } from '@/api/queries';
 import { BackHeader } from '@/components/BackHeader';
 import { Meter } from '@/components/Meter';
-import { MockupNote } from '@/components/Mockup';
 import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
-import { money } from '@/lib/format';
-import { CONTRIBUTIONS, goalById } from '@/lib/mockup';
+import { EmptyState, ErrorState, InlineError, Loading } from '@/components/States';
+import { dayMonth, money, monthYear } from '@/lib/format';
 import { colors, fonts, space, tabular } from '@/theme/tokens';
 
 export default function GoalScreen() {
   const params = useLocalSearchParams<{ id: string }>();
-  const goal = goalById(params.id ?? '');
-  const remaining = goal.target - goal.saved;
+  const router = useRouter();
+  const query = useGoal(params.id);
+  const accounts = useAccounts();
+  const removeGoal = useDeleteGoal();
+  const removeContribution = useRemoveContribution(params.id ?? '');
+
+  const goal = query.data;
+  const vault = (accounts.data ?? []).find((account) => account.id === goal?.accountId);
+
+  const confirmDelete = () => {
+    Alert.alert(
+      'apagar esta meta',
+      'os aportes somem junto. os lançamentos que financiaram continuam no extrato.',
+      [
+        { text: 'deixar como está', style: 'cancel' },
+        {
+          text: 'apagar',
+          style: 'destructive',
+          onPress: () => removeGoal.mutate(params.id as string, { onSuccess: () => router.back() }),
+        },
+      ],
+    );
+  };
+
+  if (query.error) {
+    return (
+      <Screen>
+        <BackHeader title="uma meta" />
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      </Screen>
+    );
+  }
+
+  if (query.isPending || !goal) {
+    return (
+      <Screen>
+        <BackHeader title="uma meta" />
+        <Loading label="conferindo o quanto falta" />
+      </Screen>
+    );
+  }
+
+  const achieved = Number(goal.remaining) === 0;
 
   return (
     <Screen scroll contentStyle={styles.content}>
       <View style={styles.header}>
         <BackHeader title={goal.name} compact />
-        <Pressable style={styles.edit}>
-          <Text style={styles.editLabel}>editar</Text>
+        <Pressable style={styles.delete} onPress={confirmDelete}>
+          <Text style={styles.deleteLabel}>apagar</Text>
         </Pressable>
-      </View>
-
-      <View style={styles.mockup}>
-        <MockupNote />
       </View>
 
       <View style={styles.balance}>
@@ -36,76 +73,121 @@ export default function GoalScreen() {
       </View>
 
       <View style={styles.meter}>
-        <Meter color={colors.sage} spent={goal.saved / goal.target} committed={0} />
+        <Meter
+          color={colors.sage}
+          spent={Number(goal.saved) / Number(goal.targetAmount)}
+          committed={0}
+        />
       </View>
 
       <View style={styles.figures}>
-        <Money style={styles.figure}>{`faltam ${money(remaining)}`}</Money>
         <Money style={styles.figure}>
-          {goal.targetLabel
-            ? `alvo ${money(goal.target)} · ${goal.targetLabel}`
-            : `alvo ${money(goal.target)}`}
+          {achieved ? 'chegou no alvo' : `faltam ${money(goal.remaining)}`}
+        </Money>
+        <Money style={styles.figure}>
+          {goal.targetDate
+            ? `alvo ${money(goal.targetAmount)} · ${monthYear(goal.targetDate)}`
+            : `alvo ${money(goal.targetAmount)}`}
         </Money>
       </View>
 
       <View style={styles.pace}>
-        {goal.requiredMonthly ? (
-          <Text style={styles.paceTitle}>{`${money(goal.requiredMonthly)} por mês até lá`}</Text>
-        ) : (
-          <Text style={styles.paceTitle}>sem data marcada</Text>
-        )}
-        <Text style={styles.paceBody}>{goal.pace}</Text>
+        <Text style={styles.paceTitle}>
+          {goal.requiredMonthly
+            ? `${money(goal.requiredMonthly)} por mês até lá`
+            : goal.targetDate
+              ? 'a data-alvo já passou'
+              : 'sem data marcada'}
+        </Text>
+        <Text style={styles.paceBody}>{paceSentence(goal)}</Text>
       </View>
 
       <View style={styles.where}>
-        <View
-          style={[styles.mark, { backgroundColor: goal.accountName ? '#4FC7B6' : colors.rule }]}
-        />
+        <View style={[styles.mark, { backgroundColor: vault ? '#4FC7B6' : colors.rule }]} />
         <View style={styles.whereBody}>
           <Text style={styles.whereTitle}>
-            {goal.accountName ? `o dinheiro está na ${goal.accountName}` : 'nenhuma conta ligada'}
+            {vault ? `o dinheiro está na ${vault.name}` : 'nenhuma conta ligada'}
           </Text>
           <Text style={styles.whereNote}>
-            {goal.accountName
+            {vault
               ? 'guardar aqui move dinheiro de verdade'
               : 'guardar aqui só anota — nenhuma conta se mexe'}
           </Text>
         </View>
       </View>
 
-      <Link href="/meta/aporte" asChild>
-        <Pressable style={styles.save}>
-          <Text style={styles.saveLabel}>guardar um pouco</Text>
-        </Pressable>
-      </Link>
+      <Pressable
+        style={styles.save}
+        onPress={() => router.push({ pathname: '/meta/aporte', params: { goalId: goal.id } })}
+      >
+        <Text style={styles.saveLabel}>guardar um pouco</Text>
+      </Pressable>
+
+      <InlineError error={removeGoal.error ?? removeContribution.error} />
 
       <Text style={styles.section}>o que você já guardou</Text>
 
-      <View style={styles.list}>
-        {CONTRIBUTIONS.map((item) => (
-          <View key={item.id} style={styles.row}>
-            <View style={styles.dateColumn}>
-              <Money style={styles.date}>{item.date}</Money>
-            </View>
-            <View style={styles.body}>
-              <Text style={styles.name}>{item.origin}</Text>
-              <Text style={styles.caption}>{item.detail}</Text>
-            </View>
-            <Money style={styles.amount}>{money(item.amount)}</Money>
-          </View>
-        ))}
-      </View>
+      {goal.contributions.length === 0 ? (
+        <EmptyState text="nenhum aporte ainda" />
+      ) : (
+        <View style={styles.list}>
+          {goal.contributions.map((contribution) => (
+            <Pressable
+              key={contribution.id}
+              style={styles.row}
+              onLongPress={() => removeContribution.mutate(contribution.id)}
+            >
+              <View style={styles.dateColumn}>
+                <Money style={styles.date}>{dayMonth(contribution.date)}</Money>
+              </View>
+              <View style={styles.body}>
+                <Text style={styles.name}>
+                  {contribution.transactionId ? 'saiu de uma conta' : 'só anotado'}
+                </Text>
+                <Text style={styles.caption}>
+                  {contribution.transactionId
+                    ? 'virou transferência no extrato'
+                    : 'nenhuma conta se mexeu'}
+                </Text>
+              </View>
+              <Money style={styles.amount}>{money(contribution.amount)}</Money>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {goal.contributions.length > 0 ? (
+        <Text style={styles.hint}>segure um aporte para apagar</Text>
+      ) : null}
     </Screen>
   );
+}
+
+function paceSentence(goal: {
+  pace: string | null;
+  projectedDate: string | null;
+  onTrack: boolean | null;
+  remaining: string;
+}): string {
+  if (Number(goal.remaining) === 0) return 'meta batida. o dinheiro já está guardado.';
+  if (!goal.pace) return 'ainda não dá para ver um ritmo — falta histórico de aportes.';
+
+  const projected = goal.projectedDate ? monthYear(goal.projectedDate) : null;
+
+  if (!projected) return `no ritmo de ${money(goal.pace)} por mês.`;
+  if (goal.onTrack === false) {
+    return `no ritmo de ${money(goal.pace)} por mês você chega em ${projected}, depois do que combinou consigo mesmo.`;
+  }
+
+  return `no ritmo de ${money(goal.pace)} por mês você chega em ${projected}.`;
 }
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 24 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  edit: { minHeight: space.touch, justifyContent: 'center' },
-  editLabel: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkFaint },
-  mockup: { marginTop: 14 },
-  balance: { marginTop: 22, gap: 4 },
+  delete: { minHeight: space.touch, justifyContent: 'center' },
+  deleteLabel: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkFaint },
+  balance: { marginTop: 26, gap: 4 },
   balanceLabel: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkMuted },
   balanceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   currency: { fontFamily: fonts.serif, fontSize: 21, color: colors.inkFaint },
@@ -167,4 +249,5 @@ const styles = StyleSheet.create({
   name: { fontFamily: fonts.sans, fontSize: 14, color: colors.ink },
   caption: { fontFamily: fonts.sans, fontSize: 12, color: colors.inkFaint },
   amount: { fontSize: 15, color: colors.ink, marginTop: 1, ...tabular },
+  hint: { marginTop: 12, fontFamily: fonts.sans, fontSize: 12, color: colors.inkGhost },
 });

@@ -1,138 +1,181 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useAccounts, useContribute, useGoal } from '@/api/queries';
 import { Actions } from '@/components/Actions';
 import { BackHeader } from '@/components/BackHeader';
-import { Field } from '@/components/Field';
-import { MockupNote } from '@/components/Mockup';
+import { DateField } from '@/components/DateField';
 import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
-import { ChevronDown } from '@/components/icons';
-import { money } from '@/lib/format';
-import { accountById, goalById } from '@/lib/mockup';
-import { colors, fonts, tabular, type } from '@/theme/tokens';
+import { ErrorState, InlineError, Loading } from '@/components/States';
+import { TextField } from '@/components/TextField';
+import { accountTone } from '@/lib/account';
+import { money, monthYear } from '@/lib/format';
+import { parseAmount } from '@/lib/money';
+import { colors, fonts, space, tabular } from '@/theme/tokens';
 
 export default function ContributionScreen() {
   const router = useRouter();
-  const [fromAccount, setFromAccount] = useState(true);
-  const goal = goalById('notebook');
-  const source = accountById('nubank');
-  const vault = accountById('reserva');
-  const amount = goal.requiredMonthly ?? 0;
+  const params = useLocalSearchParams<{ goalId: string }>();
+  const query = useGoal(params.goalId);
+  const accountsQuery = useAccounts();
+  const contribute = useContribute(params.goalId ?? '');
+
+  const goal = query.data;
+  const accounts = accountsQuery.data ?? [];
+  const vault = accounts.find((account) => account.id === goal?.accountId);
+  const sources = accounts.filter((account) => account.id !== goal?.accountId);
+
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState(new Date().toISOString());
+  const [fromAccountId, setFromAccountId] = useState<string | undefined>();
+  const [amountError, setAmountError] = useState<string | undefined>();
+
+  const submit = () => {
+    const value = parseAmount(amount);
+
+    if (!value) {
+      setAmountError('quanto você quer guardar?');
+      return;
+    }
+
+    setAmountError(undefined);
+    contribute.mutate({ amount: value, date, fromAccountId }, { onSuccess: () => router.back() });
+  };
+
+  if (query.error) {
+    return (
+      <Screen>
+        <BackHeader title="guardar um pouco" />
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      </Screen>
+    );
+  }
+
+  if (query.isPending || !goal) {
+    return (
+      <Screen>
+        <BackHeader title="guardar um pouco" />
+        <Loading label="abrindo a meta" />
+      </Screen>
+    );
+  }
+
+  const canMoveMoney = Boolean(vault) && sources.length > 0;
 
   return (
     <Screen scroll contentStyle={styles.content}>
       <BackHeader title="guardar um pouco" />
       <Text style={styles.subtitle}>{`para ${goal.name.toLowerCase()}`}</Text>
 
-      <View style={styles.mockup}>
-        <MockupNote />
-      </View>
-
-      <View style={styles.amountField}>
-        <Text style={type.label}>quanto</Text>
-        <View style={styles.amountLine}>
-          <Text style={styles.currency}>R$</Text>
-          <Money style={styles.amount}>{money(amount)}</Money>
-        </View>
-        <Text style={[type.caption, styles.hint]}>
-          {goal.targetLabel
-            ? `o quanto falta por mês para chegar em ${goal.targetLabel}`
-            : 'sem data marcada, você escolhe o passo'}
-        </Text>
+      <View style={styles.field}>
+        <TextField
+          label="quanto"
+          value={amount}
+          onChangeText={setAmount}
+          placeholder="0,00"
+          keyboardType="decimal-pad"
+          error={amountError}
+          hint={
+            goal.requiredMonthly
+              ? `${money(goal.requiredMonthly)} por mês chega em ${goal.targetDate ? monthYear(goal.targetDate) : 'tempo'}`
+              : undefined
+          }
+          inputStyle={styles.amountInput}
+        />
       </View>
 
       <View style={styles.field}>
-        <Field label="quando">
-          <View style={styles.picker}>
-            <Money style={styles.value}>23/08/2026</Money>
-            <ChevronDown />
-          </View>
-        </Field>
+        <DateField label="quando" value={date} onChange={setDate} />
       </View>
 
-      <Text style={styles.question}>o dinheiro sai de algum lugar?</Text>
+      {canMoveMoney ? (
+        <>
+          <Text style={styles.question}>o dinheiro sai de algum lugar?</Text>
 
-      <View style={styles.options}>
-        <Pressable
-          onPress={() => setFromAccount(true)}
-          style={[styles.option, fromAccount ? styles.optionPicked : null]}
-        >
-          <View style={[styles.radio, fromAccount ? styles.radioPicked : null]}>
-            {fromAccount ? <View style={styles.radioDot} /> : null}
-          </View>
-          <View style={styles.optionBody}>
-            <Text style={[styles.optionTitle, fromAccount ? null : styles.optionTitleOff]}>
-              {`sai do ${source.name}`}
-            </Text>
-            <Text style={styles.optionNote}>
-              O dinheiro se move de verdade: sai da conta corrente e entra na {vault.name}. Aparece
-              no extrato como transferência, e nenhum dos dois lados vira despesa.
-            </Text>
-          </View>
-        </Pressable>
+          <View style={styles.options}>
+            {sources.map((account) => (
+              <Pressable
+                key={account.id}
+                onPress={() => setFromAccountId(account.id)}
+                style={[styles.option, fromAccountId === account.id ? styles.optionPicked : null]}
+              >
+                <View
+                  style={[styles.radio, fromAccountId === account.id ? styles.radioPicked : null]}
+                >
+                  {fromAccountId === account.id ? <View style={styles.radioDot} /> : null}
+                </View>
+                <View style={styles.optionBody}>
+                  <View style={styles.optionHead}>
+                    <View style={[styles.mark, { backgroundColor: accountTone(account.color) }]} />
+                    <Text style={styles.optionTitle}>{`sai do ${account.name}`}</Text>
+                  </View>
+                  <Text style={styles.optionNote}>
+                    {`o dinheiro se move de verdade: sai daqui e entra na ${vault?.name}. Aparece no extrato como transferência, e nenhum dos dois lados vira despesa.`}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
 
-        <Pressable
-          onPress={() => setFromAccount(false)}
-          style={[styles.option, fromAccount ? null : styles.optionPicked]}
-        >
-          <View style={[styles.radio, fromAccount ? null : styles.radioPicked]}>
-            {fromAccount ? null : <View style={styles.radioDot} />}
+            <Pressable
+              onPress={() => setFromAccountId(undefined)}
+              style={[styles.option, fromAccountId ? null : styles.optionPicked]}
+            >
+              <View style={[styles.radio, fromAccountId ? null : styles.radioPicked]}>
+                {fromAccountId ? null : <View style={styles.radioDot} />}
+              </View>
+              <View style={styles.optionBody}>
+                <Text style={styles.optionTitle}>só anotar</Text>
+                <Text style={styles.optionNote}>
+                  Nenhuma conta se mexe. Serve para dinheiro que mora fora do app.
+                </Text>
+              </View>
+            </Pressable>
           </View>
-          <View style={styles.optionBody}>
-            <Text style={[styles.optionTitle, fromAccount ? styles.optionTitleOff : null]}>
-              só anotar
-            </Text>
-            <Text style={styles.optionNote}>
-              Nenhuma conta se mexe. Serve para dinheiro que mora fora do app — o cofre da vó, o CDB
-              que você não acompanha aqui.
-            </Text>
-          </View>
-        </Pressable>
-      </View>
+        </>
+      ) : (
+        <Text style={styles.onlyNote}>
+          {vault
+            ? 'esta meta tem conta, mas não há outra conta de onde tirar o dinheiro — o aporte vai só ser anotado.'
+            : 'esta meta não tem conta ligada, então o aporte é só escrituração: nenhuma conta se mexe.'}
+        </Text>
+      )}
 
       <View style={styles.result}>
-        <Text style={styles.resultLabel}>
-          {fromAccount ? `a ${vault.name} fica com` : 'a meta fica com'}
-        </Text>
+        <Text style={styles.resultLabel}>a meta fica com</Text>
         <Money style={styles.resultValue}>
-          {money(fromAccount ? vault.balance + amount : goal.saved + amount)}
+          {money(Number(goal.saved) + (parseAmount(amount) ?? 0))}
         </Money>
+      </View>
+
+      <View style={styles.error}>
+        <InlineError error={contribute.error} />
       </View>
 
       <View style={styles.spacer} />
 
-      <Actions primaryLabel="guardar" onPrimary={() => router.back()} />
+      <Actions primaryLabel="guardar" onPrimary={submit} busy={contribute.isPending} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 34 },
-  subtitle: { marginTop: 10, marginLeft: 30, fontFamily: fonts.sans, fontSize: 13, color: colors.inkFaint },
-  mockup: { marginTop: 14 },
-  amountField: { marginTop: 24, gap: 6 },
-  amountLine: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.rule,
-    paddingBottom: 7,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 7,
+  subtitle: {
+    marginTop: 10,
+    marginLeft: 30,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    color: colors.inkFaint,
   },
-  currency: { fontFamily: fonts.serif, fontSize: 16, color: colors.inkFaint },
-  amount: {
+  field: { marginTop: 24 },
+  amountInput: {
     fontFamily: fonts.serif,
     fontSize: 34,
-    lineHeight: 38,
+    lineHeight: 40,
     letterSpacing: -0.7,
-    color: colors.ink,
     ...tabular,
   },
-  hint: { marginTop: 3 },
-  field: { marginTop: 24 },
-  picker: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  value: { fontFamily: fonts.sans, fontSize: 17, color: colors.ink },
   question: { marginTop: 30, fontFamily: fonts.sans, fontSize: 12, color: colors.inkFaint },
   options: { marginTop: 14, gap: 12 },
   option: {
@@ -158,9 +201,17 @@ const styles = StyleSheet.create({
   radioPicked: { borderColor: colors.sage },
   radioDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.sage },
   optionBody: { flexGrow: 1, flexShrink: 1, gap: 7 },
+  optionHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mark: { width: 3, height: 14, borderRadius: 2 },
   optionTitle: { fontFamily: fonts.sans, fontSize: 15, color: colors.ink },
-  optionTitleOff: { color: colors.inkMuted },
   optionNote: { fontFamily: fonts.sans, fontSize: 12, lineHeight: 19, color: colors.inkFaint },
+  onlyNote: {
+    marginTop: 26,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 21,
+    color: colors.inkMuted,
+  },
   result: {
     marginTop: 22,
     paddingTop: 16,
@@ -172,5 +223,6 @@ const styles = StyleSheet.create({
   },
   resultLabel: { fontFamily: fonts.sans, fontSize: 13, color: colors.inkFaint },
   resultValue: { fontFamily: fonts.serif, fontSize: 19, color: colors.ink, ...tabular },
-  spacer: { flexGrow: 1, minHeight: 24 },
+  error: { marginTop: 12, minHeight: space.touch },
+  spacer: { flexGrow: 1, minHeight: 20 },
 });

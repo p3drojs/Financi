@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useBalanceEvolution, useByCategory, useCategories, useSummary } from '@/api/queries';
 import { CategoryTotal } from '@/api/types';
+import { AccountStrip } from '@/components/AccountStrip';
+import { MonthOutlook } from '@/components/MonthOutlook';
 import { Money } from '@/components/Money';
 import { Screen } from '@/components/Screen';
 import { ErrorState, Loading } from '@/components/States';
@@ -74,6 +76,8 @@ export default function MonthScreen() {
         </View>
       </View>
 
+      {atCurrentMonth ? <AccountStrip /> : null}
+
       {failure ? <ErrorState error={failure} onRetry={retry} /> : null}
 
       {!failure && summary.isPending ? <Loading label="somando o mês" /> : null}
@@ -91,15 +95,17 @@ export default function MonthScreen() {
           <View style={styles.totals}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>entrou</Text>
-              <Money style={styles.totalIncome}>{money(summary.data.totalIncome)}</Money>
+              <Money style={styles.totalIncome}>{`+${money(summary.data.totalIncome)}`}</Money>
             </View>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>saiu</Text>
-              <Money style={styles.totalExpense}>{money(summary.data.totalExpense)}</Money>
+              <Money style={styles.totalExpense}>{`-${money(summary.data.totalExpense)}`}</Money>
             </View>
           </View>
         </>
       ) : null}
+
+      {atCurrentMonth ? <MonthOutlook /> : null}
 
       <View style={styles.divider}>
         <WavyRule />
