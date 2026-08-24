@@ -1,5 +1,7 @@
 # Financi
 
+> Leia em [English](README.md).
+
 Controle financeiro pessoal — API REST + app mobile, construídos do zero como projeto
 de portfólio. Registra receitas, despesas, transferências entre contas, parcelamentos,
 lançamentos recorrentes, orçamentos por categoria e metas de economia.
